@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { PlusCircle, Edit2, Trash2, Search, Package } from "lucide-react";
 
 /* ───────────────────────── CONFIG & HELPERS ───────────────────────── */
 const Rs = (n) => `Rs ${Number(n || 0).toLocaleString()}`;
@@ -13,17 +14,13 @@ export default function ProfessionalInventory() {
   });
 
   const [inventory, setInventory] = useState([
-    { id: 1, name: "Paracetamol 500mg", expiry: "2026-05-20", purchasePrice: 40, salePrice: 50, quantity: 5 }, // Low Stock
-    { id: 2, name: "Amoxicillin 250mg", expiry: "2024-12-01", purchasePrice: 100, salePrice: 120, quantity: 50 }, // Expiring
+    { id: 1, name: "Paracetamol 500mg", expiry: "2026-05-20", purchasePrice: 40, salePrice: 50, quantity: 5 }, 
+    { id: 2, name: "Amoxicillin 250mg", expiry: "2024-12-01", purchasePrice: 100, salePrice: 120, quantity: 50 },
   ]);
   const [editId, setEditId] = useState(null);
   const [search, setSearch] = useState("");
 
-  /* ───────────── LOGIC ───────────── */
-
-  const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-  };
+  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
   const margin = useMemo(() => {
     if (!form.purchasePrice || !form.salePrice) return 0;
@@ -52,7 +49,7 @@ export default function ProfessionalInventory() {
   };
 
   const handleDelete = (id) => {
-    if (window.confirm("Are you sure you want to remove this medicine from records?")) {
+    if (window.confirm("Delete this item?")) {
       setInventory(inventory.filter((item) => item.id !== id));
     }
   };
@@ -62,10 +59,10 @@ export default function ProfessionalInventory() {
     const expiryDate = new Date(item.expiry);
     const diffMonths = (expiryDate - today) / (1000 * 60 * 60 * 24 * 30);
 
-    if (item.quantity <= 0) return { label: "Out of Stock", color: "bg-red-100 text-red-700" };
-    if (item.quantity < 10) return { label: "Low Stock", color: "bg-orange-100 text-orange-700" };
-    if (diffMonths < 3) return { label: "Expiring Soon", color: "bg-yellow-100 text-yellow-700" };
-    return { label: "Healthy", color: "bg-green-100 text-green-700" };
+    if (item.quantity <= 0) return { label: "Out", color: "bg-red-50 text-red-600" };
+    if (item.quantity < 10) return { label: "Low", color: "bg-orange-50 text-orange-600" };
+    if (diffMonths < 3) return { label: "Expiring", color: "bg-amber-50 text-amber-600" };
+    return null;
   };
 
   const filteredInventory = inventory.filter((item) =>
@@ -73,175 +70,179 @@ export default function ProfessionalInventory() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 lg:p-10 font-sans text-slate-900">
-      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
-        
-        {/* LEFT: FORM SECTION (33%) */}
-        <div className="lg:col-span-4">
-          <div className="bg-white rounded-[2.5rem] shadow-xl shadow-slate-200/50 p-8 sticky top-10 border border-white">
-            <div className="mb-6">
-              <h2 className="text-2xl font-black tracking-tight text-slate-800">
-                {editId ? "Edit Medicine" : "New Entry"}
-              </h2>
-              <p className="text-slate-400 text-sm font-medium">Update your pharmacy stock</p>
+    <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 fade-in">
+      
+      {/* LEFT: FORM SECTION (33%) */}
+      <div className="lg:col-span-4">
+        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 sticky top-24">
+          <div className="mb-6 flex items-center gap-3">
+            <div className="p-2 bg-primary-50 text-primary-600 rounded-lg">
+              {editId ? <Edit2 size={20} /> : <PlusCircle size={20} />}
+            </div>
+            <h2 className="text-xl font-bold text-gray-900">
+              {editId ? "Edit Item" : "Add Item"}
+            </h2>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-gray-500 uppercase ml-1">Name</label>
+              <input
+                name="name"
+                value={form.name}
+                onChange={handleChange}
+                placeholder="Medicine Name"
+                className="w-full bg-gray-50 border border-gray-200 focus:border-primary-400 focus:bg-white focus:ring-4 focus:ring-primary-50 p-3 rounded-xl outline-none font-medium transition-all"
+                required
+              />
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-gray-500 uppercase ml-1">Expiry</label>
+              <input
+                type="date"
+                name="expiry"
+                value={form.expiry}
+                onChange={handleChange}
+                className="w-full bg-gray-50 border border-gray-200 focus:border-primary-400 focus:bg-white focus:ring-4 focus:ring-primary-50 p-3 rounded-xl outline-none font-medium transition-all"
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Medicine Name</label>
-                <input
-                  name="name"
-                  value={form.name}
-                  onChange={handleChange}
-                  placeholder="e.g. Panadol CF"
-                  className="w-full bg-slate-50 border-2 border-transparent focus:border-green-500 focus:bg-white p-4 rounded-2xl outline-none transition-all font-bold"
-                  required
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Expiry Date</label>
-                <input
-                  type="date"
-                  name="expiry"
-                  value={form.expiry}
-                  onChange={handleChange}
-                  className="w-full bg-slate-50 border-2 border-transparent focus:border-green-500 focus:bg-white p-4 rounded-2xl outline-none transition-all font-bold"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Purchase (Rs)</label>
-                  <input
-                    type="number"
-                    name="purchasePrice"
-                    value={form.purchasePrice}
-                    onChange={handleChange}
-                    className="w-full bg-slate-50 border-2 border-transparent focus:border-green-500 focus:bg-white p-4 rounded-2xl outline-none transition-all font-bold"
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Sale (Rs)</label>
-                  <input
-                    type="number"
-                    name="salePrice"
-                    value={form.salePrice}
-                    onChange={handleChange}
-                    className="w-full bg-slate-50 border-2 border-transparent focus:border-green-500 focus:bg-white p-4 rounded-2xl outline-none transition-all font-bold"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-between items-center px-2 py-1">
-                <span className="text-xs font-bold text-slate-400">Estimated Margin:</span>
-                <span className={`text-xs font-black ${margin > 0 ? 'text-green-600' : 'text-red-500'}`}>{margin}%</span>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Stock Quantity</label>
+                <label className="text-xs font-bold text-gray-500 uppercase ml-1">Cost</label>
                 <input
                   type="number"
-                  name="quantity"
-                  value={form.quantity}
+                  name="purchasePrice"
+                  value={form.purchasePrice}
                   onChange={handleChange}
-                  placeholder="Units"
-                  className="w-full bg-slate-50 border-2 border-transparent focus:border-green-500 focus:bg-white p-4 rounded-2xl outline-none transition-all font-bold text-xl"
+                  placeholder="0.00"
+                  className="w-full bg-gray-50 border border-gray-200 focus:border-primary-400 focus:bg-white focus:ring-4 focus:ring-primary-50 p-3 rounded-xl outline-none font-medium transition-all"
                   required
                 />
               </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-500 uppercase ml-1">Price</label>
+                <input
+                  type="number"
+                  name="salePrice"
+                  value={form.salePrice}
+                  onChange={handleChange}
+                  placeholder="0.00"
+                  className="w-full bg-gray-50 border border-gray-200 focus:border-primary-400 focus:bg-white focus:ring-4 focus:ring-primary-50 p-3 rounded-xl outline-none font-medium transition-all"
+                  required
+                />
+              </div>
+            </div>
 
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-gray-500 uppercase ml-1">Quantity</label>
+              <input
+                type="number"
+                name="quantity"
+                value={form.quantity}
+                onChange={handleChange}
+                placeholder="0"
+                className="w-full bg-gray-50 border border-gray-200 focus:border-primary-400 focus:bg-white focus:ring-4 focus:ring-primary-50 p-3 rounded-xl outline-none font-medium transition-all"
+                required
+              />
+            </div>
+
+            <div className="pt-4">
               <button
                 type="submit"
-                className={`w-full py-5 rounded-2xl font-black text-lg shadow-lg transition-all active:scale-95
-                  ${editId ? 'bg-blue-500 shadow-blue-100 text-white' : 'bg-green-500 shadow-green-100 text-white hover:bg-green-600'}`}
+                className={`w-full py-3.5 rounded-xl font-bold transition-all active:scale-[0.98]
+                  ${editId ? 'bg-gray-900 text-white hover:bg-gray-800' : 'bg-primary-600 text-white hover:bg-primary-700'}`}
               >
-                {editId ? "SAVE CHANGES" : "ADD TO INVENTORY"}
+                {editId ? "Save Changes" : "Save Item"}
               </button>
-              
-              {editId && (
-                <button 
-                  type="button" 
-                  onClick={() => { setEditId(null); setForm({ name: "", expiry: "", purchasePrice: "", salePrice: "", quantity: "" }); }}
-                  className="w-full text-slate-400 text-xs font-bold uppercase tracking-widest hover:text-red-500 transition-colors"
-                >
-                  Cancel Edit
-                </button>
-              )}
-            </form>
+            </div>
+            
+            {editId && (
+              <button 
+                type="button" 
+                onClick={() => { setEditId(null); setForm({ name: "", expiry: "", purchasePrice: "", salePrice: "", quantity: "" }); }}
+                className="w-full text-gray-400 text-xs font-bold uppercase hover:text-gray-700 transition-colors py-2"
+              >
+                Cancel
+              </button>
+            )}
+          </form>
+        </div>
+      </div>
+
+      {/* RIGHT: INVENTORY TABLE (66%) */}
+      <div className="lg:col-span-8 flex flex-col gap-4">
+        <div className="flex justify-between items-center bg-white p-4 rounded-3xl border border-gray-100 shadow-sm">
+          <h2 className="text-xl font-bold text-gray-900 pl-2">Inventory</h2>
+          <div className="relative w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+            <input
+              type="text"
+              placeholder="Search..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full p-2.5 pl-9 bg-gray-50 rounded-xl border border-gray-200 focus:border-primary-400 focus:bg-white outline-none font-medium text-sm transition-all"
+            />
           </div>
         </div>
 
-        {/* RIGHT: INVENTORY TABLE (66%) */}
-        <div className="lg:col-span-8 space-y-6">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-            <h2 className="text-3xl font-black tracking-tighter italic">STOCK<span className="text-green-500">MASTER</span></h2>
-            <div className="relative w-full md:w-96">
-              <input
-                type="text"
-                placeholder="Quick search medicines..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full p-4 pl-12 bg-white rounded-2xl border-2 border-transparent focus:border-green-500 outline-none shadow-sm font-bold transition-all"
-              />
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 font-bold italic">🔍</span>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-[2.5rem] shadow-xl shadow-slate-200/50 overflow-hidden border border-white">
+        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden flex-1">
+          <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-50/50 border-b border-slate-100">
-                  <th className="p-6 text-[10px] font-black uppercase tracking-widest text-slate-400">Medicine Details</th>
-                  <th className="p-6 text-[10px] font-black uppercase tracking-widest text-slate-400">Financials</th>
-                  <th className="p-6 text-[10px] font-black uppercase tracking-widest text-slate-400">Stock Status</th>
-                  <th className="p-6 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">Actions</th>
+                <tr className="bg-gray-50/50 border-b border-gray-100">
+                  <th className="px-5 py-4 text-[11px] font-bold uppercase text-gray-400">Item</th>
+                  <th className="px-5 py-4 text-[11px] font-bold uppercase text-gray-400">Price</th>
+                  <th className="px-5 py-4 text-[11px] font-bold uppercase text-gray-400">Stock</th>
+                  <th className="px-5 py-4 text-[11px] font-bold uppercase text-gray-400 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-50">
+              <tbody className="divide-y divide-gray-50">
                 {filteredInventory.length === 0 ? (
                   <tr>
-                    <td colSpan="4" className="p-20 text-center text-slate-300 font-bold italic uppercase tracking-widest">No matching stock found</td>
+                    <td colSpan="4" className="py-12 text-center text-gray-400">
+                      <Package size={32} className="mx-auto mb-2 opacity-50" />
+                      <p className="font-bold text-sm">No items found</p>
+                    </td>
                   </tr>
                 ) : (
                   filteredInventory.map((item) => {
                     const status = getStatus(item);
                     return (
-                      <tr key={item.id} className="hover:bg-green-50/30 transition-colors group">
-                        <td className="p-6">
-                          <p className="font-black text-slate-800 text-lg">{item.name}</p>
-                          <p className="text-xs text-slate-400 font-bold uppercase tracking-tighter">Expires: {item.expiry}</p>
+                      <tr key={item.id} className="hover:bg-gray-50/50 transition-colors group">
+                        <td className="px-5 py-3">
+                          <p className="font-bold text-gray-900 text-sm line-clamp-1">{item.name}</p>
+                          <p className="text-xs font-medium text-gray-400">Exp: {item.expiry}</p>
                         </td>
-                        <td className="p-6">
-                          <p className="text-sm font-bold text-slate-600"><span className="text-[10px] uppercase text-slate-300 mr-1">Sale</span> {Rs(item.salePrice)}</p>
-                          <p className="text-xs text-slate-400"><span className="text-[10px] uppercase text-slate-300 mr-1">Cost</span> {Rs(item.purchasePrice)}</p>
+                        <td className="px-5 py-3">
+                          <p className="text-sm font-bold text-gray-900">{Rs(item.salePrice)}</p>
+                          <p className="text-[10px] text-gray-400 font-medium">Cost: {Rs(item.purchasePrice)}</p>
                         </td>
-                        <td className="p-6">
-                          <div className="flex flex-col gap-2">
-                            <span className="text-xl font-black text-slate-800">{item.quantity} <span className="text-[10px] text-slate-400 uppercase">units</span></span>
-                            <span className={`w-fit px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter ${status.color}`}>
-                              {status.label}
-                            </span>
+                        <td className="px-5 py-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-gray-900">{item.quantity}</span>
+                            {status && (
+                              <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${status.color}`}>
+                                {status.label}
+                              </span>
+                            )}
                           </div>
                         </td>
-                        <td className="p-6 text-right">
-                          <div className="flex gap-2 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                        <td className="px-5 py-3 text-right">
+                          <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
-                              onClick={() => { setForm(item); setEditId(item.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-                              className="bg-slate-100 hover:bg-blue-500 hover:text-white p-3 rounded-xl transition-all"
-                              title="Edit Item"
+                              onClick={() => { setForm(item); setEditId(item.id); }}
+                              className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
                             >
-                              ✏️
+                              <Edit2 size={16} />
                             </button>
                             <button
                               onClick={() => handleDelete(item.id)}
-                              className="bg-slate-100 hover:bg-red-500 hover:text-white p-3 rounded-xl transition-all"
-                              title="Delete Item"
+                              className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                             >
-                              🗑️
+                              <Trash2 size={16} />
                             </button>
                           </div>
                         </td>
@@ -253,7 +254,6 @@ export default function ProfessionalInventory() {
             </table>
           </div>
         </div>
-
       </div>
     </div>
   );
