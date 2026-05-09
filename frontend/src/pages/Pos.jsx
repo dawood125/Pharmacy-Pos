@@ -200,10 +200,11 @@ export default function ProfessionalPOS() {
         </div>
 
         <div className="p-6 flex-1 flex flex-col gap-6">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
             {[
               { name: 'Cash', icon: Banknote },
-              { name: 'Easy', icon: Wallet },
+              { name: 'EasyPaisa', icon: Wallet },
+              { name: 'JazzCash', icon: CreditCard },
               { name: 'Bank', icon: CreditCard }
             ].map(method => (
               <button

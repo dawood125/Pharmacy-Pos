@@ -1,5 +1,5 @@
 import React from 'react';
-import { Save, Store, Receipt, Bell, Shield, Database } from 'lucide-react';
+import { Save, Store, Receipt, Bell, Shield, Database, Percent } from 'lucide-react';
 
 export default function Settings() {
   return (
@@ -100,6 +100,58 @@ export default function Settings() {
                 </div>
               </div>
             </form>
+          </div>
+
+          <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 sm:p-8">
+            <h2 className="text-xl font-bold text-gray-900 mb-6 border-b border-gray-100 pb-4 flex items-center gap-3">
+              <Percent size={22} className="text-primary-600" />
+              Tax Configuration
+            </h2>
+
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-gray-500 ml-1">Sales Tax Rate (%)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    defaultValue="17"
+                    className="w-full bg-gray-50 border border-gray-200 focus:border-primary-400 focus:bg-white focus:ring-4 focus:ring-primary-50 p-3.5 rounded-xl outline-none transition-all font-semibold text-gray-800"
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-gray-500 ml-1">Tax Number (NTN)</label>
+                  <input
+                    type="text"
+                    defaultValue="1234567-8"
+                    className="w-full bg-gray-50 border border-gray-200 focus:border-primary-400 focus:bg-white focus:ring-4 focus:ring-primary-50 p-3.5 rounded-xl outline-none transition-all font-semibold text-gray-800"
+                    placeholder="NTN Number"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-gray-500 ml-1">GST Number</label>
+                  <input
+                    type="text"
+                    defaultValue="PK1234567890123"
+                    className="w-full bg-gray-50 border border-gray-200 focus:border-primary-400 focus:bg-white focus:ring-4 focus:ring-primary-50 p-3.5 rounded-xl outline-none transition-all font-semibold text-gray-800"
+                    placeholder="GST Number"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-gray-500 ml-1">Tax Inclusive</label>
+                  <select className="w-full bg-gray-50 border border-gray-200 focus:border-primary-400 focus:bg-white focus:ring-4 focus:ring-primary-50 p-3.5 rounded-xl outline-none transition-all font-semibold text-gray-800 appearance-none">
+                    <option value="inclusive">Prices include tax</option>
+                    <option value="exclusive">Add tax on top</option>
+                  </select>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 sm:p-8">

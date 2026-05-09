@@ -7,6 +7,7 @@ const Rs = (n) => `Rs ${Number(n || 0).toLocaleString()}`;
 export default function ProfessionalInventory() {
   const [form, setForm] = useState({
     name: "",
+    batchNumber: "",
     expiry: "",
     purchasePrice: "",
     salePrice: "",
@@ -14,8 +15,8 @@ export default function ProfessionalInventory() {
   });
 
   const [inventory, setInventory] = useState([
-    { id: 1, name: "Paracetamol 500mg", expiry: "2026-05-20", purchasePrice: 40, salePrice: 50, quantity: 5 }, 
-    { id: 2, name: "Amoxicillin 250mg", expiry: "2024-12-01", purchasePrice: 100, salePrice: 120, quantity: 50 },
+    { id: 1, name: "Paracetamol 500mg", batchNumber: "BATCH-001", expiry: "2026-05-20", purchasePrice: 40, salePrice: 50, quantity: 5 },
+    { id: 2, name: "Amoxicillin 250mg", batchNumber: "BATCH-002", expiry: "2024-12-01", purchasePrice: 100, salePrice: 120, quantity: 50 },
   ]);
   const [editId, setEditId] = useState(null);
   const [search, setSearch] = useState("");
@@ -45,7 +46,7 @@ export default function ProfessionalInventory() {
       setInventory([newItem, ...inventory]);
     }
 
-    setForm({ name: "", expiry: "", purchasePrice: "", salePrice: "", quantity: "" });
+    setForm({ name: "", batchNumber: "", expiry: "", purchasePrice: "", salePrice: "", quantity: "" });
   };
 
   const handleDelete = (id) => {
@@ -97,16 +98,28 @@ export default function ProfessionalInventory() {
               />
             </div>
 
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-gray-500 uppercase ml-1">Expiry</label>
-              <input
-                type="date"
-                name="expiry"
-                value={form.expiry}
-                onChange={handleChange}
-                className="w-full bg-gray-50 border border-gray-200 focus:border-primary-400 focus:bg-white focus:ring-4 focus:ring-primary-50 p-3 rounded-xl outline-none font-medium transition-all"
-                required
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-500 uppercase ml-1">Batch #</label>
+                <input
+                  name="batchNumber"
+                  value={form.batchNumber}
+                  onChange={handleChange}
+                  placeholder="Batch Number"
+                  className="w-full bg-gray-50 border border-gray-200 focus:border-primary-400 focus:bg-white focus:ring-4 focus:ring-primary-50 p-3 rounded-xl outline-none font-medium transition-all"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-500 uppercase ml-1">Expiry</label>
+                <input
+                  type="date"
+                  name="expiry"
+                  value={form.expiry}
+                  onChange={handleChange}
+                  className="w-full bg-gray-50 border border-gray-200 focus:border-primary-400 focus:bg-white focus:ring-4 focus:ring-primary-50 p-3 rounded-xl outline-none font-medium transition-all"
+                  required
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -162,7 +175,7 @@ export default function ProfessionalInventory() {
             {editId && (
               <button 
                 type="button" 
-                onClick={() => { setEditId(null); setForm({ name: "", expiry: "", purchasePrice: "", salePrice: "", quantity: "" }); }}
+                onClick={() => { setEditId(null); setForm({ name: "", batchNumber: "", expiry: "", purchasePrice: "", salePrice: "", quantity: "" }); }}
                 className="w-full text-gray-400 text-xs font-bold uppercase hover:text-gray-700 transition-colors py-2"
               >
                 Cancel
@@ -194,6 +207,7 @@ export default function ProfessionalInventory() {
               <thead>
                 <tr className="bg-gray-50/50 border-b border-gray-100">
                   <th className="px-5 py-4 text-[11px] font-bold uppercase text-gray-400">Item</th>
+                  <th className="px-5 py-4 text-[11px] font-bold uppercase text-gray-400">Batch #</th>
                   <th className="px-5 py-4 text-[11px] font-bold uppercase text-gray-400">Price</th>
                   <th className="px-5 py-4 text-[11px] font-bold uppercase text-gray-400">Stock</th>
                   <th className="px-5 py-4 text-[11px] font-bold uppercase text-gray-400 text-right">Actions</th>
@@ -202,7 +216,7 @@ export default function ProfessionalInventory() {
               <tbody className="divide-y divide-gray-50">
                 {filteredInventory.length === 0 ? (
                   <tr>
-                    <td colSpan="4" className="py-12 text-center text-gray-400">
+                    <td colSpan="5" className="py-12 text-center text-gray-400">
                       <Package size={32} className="mx-auto mb-2 opacity-50" />
                       <p className="font-bold text-sm">No items found</p>
                     </td>
@@ -215,6 +229,11 @@ export default function ProfessionalInventory() {
                         <td className="px-5 py-3">
                           <p className="font-bold text-gray-900 text-sm line-clamp-1">{item.name}</p>
                           <p className="text-xs font-medium text-gray-400">Exp: {item.expiry}</p>
+                        </td>
+                        <td className="px-5 py-3">
+                          <span className="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                            {item.batchNumber || "-"}
+                          </span>
                         </td>
                         <td className="px-5 py-3">
                           <p className="text-sm font-bold text-gray-900">{Rs(item.salePrice)}</p>
