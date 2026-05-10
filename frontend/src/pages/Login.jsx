@@ -1,27 +1,35 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BriefcaseMedical, Lock, Mail, ArrowRight } from 'lucide-react';
+import { api } from '../api/api';
+import { useToast } from '../common/Toast';
 
 export default function Login() {
   const navigate = useNavigate();
+  const { addToast } = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulate login
-    setTimeout(() => {
-      setIsLoading(false);
+
+    try {
+      const data = await api.login(email, password);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      addToast(`Welcome back, ${data.user.name}!`, 'success');
       navigate('/');
-    }, 800);
+    } catch (err) {
+      addToast(err.message || 'Login failed. Please check your credentials.', 'error');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 fade-in relative overflow-hidden">
-      
-      {/* Background Elements */}
+
       <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-primary-400 rounded-full mix-blend-multiply filter blur-[128px] opacity-20 animate-blob"></div>
       <div className="absolute top-[20%] right-[-10%] w-96 h-96 bg-blue-400 rounded-full mix-blend-multiply filter blur-[128px] opacity-20 animate-blob animation-delay-2000"></div>
       <div className="absolute bottom-[-20%] left-[20%] w-96 h-96 bg-emerald-400 rounded-full mix-blend-multiply filter blur-[128px] opacity-20 animate-blob animation-delay-4000"></div>
@@ -43,7 +51,7 @@ export default function Login() {
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md relative z-10">
         <div className="bg-white/80 backdrop-blur-xl py-10 px-6 shadow-2xl shadow-gray-200/50 sm:rounded-[2.5rem] sm:px-10 border border-white">
           <form className="space-y-6" onSubmit={handleLogin}>
-            
+
             <div className="space-y-1.5">
               <label className="text-xs font-bold uppercase tracking-wider text-gray-500 ml-1">Email address</label>
               <div className="relative">
@@ -75,26 +83,6 @@ export default function Login() {
                   className="block w-full pl-12 pr-4 py-4 border border-gray-200 rounded-2xl bg-gray-50/50 text-gray-900 font-medium placeholder-gray-400 focus:outline-none focus:ring-4 focus:ring-primary-50 focus:border-primary-400 focus:bg-white transition-all sm:text-sm"
                   placeholder="••••••••"
                 />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <input
-                  id="remember-me"
-                  name="remember-me"
-                  type="checkbox"
-                  className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded cursor-pointer"
-                />
-                <label htmlFor="remember-me" className="ml-2 block text-sm font-medium text-gray-700 cursor-pointer">
-                  Remember me
-                </label>
-              </div>
-
-              <div className="text-sm">
-                <a href="#" className="font-bold text-primary-600 hover:text-primary-500 transition-colors">
-                  Forgot password?
-                </a>
               </div>
             </div>
 

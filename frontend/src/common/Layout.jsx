@@ -7,8 +7,11 @@ export default function Layout({ children }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const { pathname } = useLocation();
 
+  // Hide sidebar for POS and Inventory pages
+  const isFullWidthPage = pathname === '/pos' || pathname === '/inventory-management';
+
   useEffect(() => {
-    if (pathname === '/pos' || pathname === '/inventory-management') {
+    if (isFullWidthPage) {
       setIsSidebarOpen(false);
     } else {
       setIsSidebarOpen(true);
@@ -16,19 +19,29 @@ export default function Layout({ children }) {
   }, [pathname]);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
+    <div className={`flex h-screen overflow-hidden bg-gray-50 print:bg-white ${isFullWidthPage ? 'sidebar-hidden' : ''}`}>
 
-      {/* SIDEBAR */}
-      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
+      {/* SIDEBAR - Only show when not full width */}
+      {!isFullWidthPage && (
+        <div className="print:hidden">
+          <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
+        </div>
+      )}
 
       {/* MAIN AREA */}
-      <div className="flex-1 flex flex-col h-screen overflow-hidden">
+      <div className={`flex-1 flex flex-col h-screen overflow-hidden ${isFullWidthPage ? 'w-full' : ''} print:h-auto print:overflow-visible`}>
 
-        {/* NAVBAR (GLOBAL) */}
-        <Navbar onOpenSidebar={() => setIsSidebarOpen(true)} isSidebarOpen={isSidebarOpen} />
+        {/* NAVBAR */}
+        <div className="print:hidden">
+          <Navbar
+            onOpenSidebar={() => setIsSidebarOpen(true)}
+            isSidebarOpen={isSidebarOpen}
+            isFullWidthPage={isFullWidthPage}
+          />
+        </div>
 
         {/* PAGE CONTENT */}
-        <main className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+        <main className={`flex-1 overflow-y-auto custom-scrollbar print:overflow-visible ${isFullWidthPage ? 'p-2 print:p-0' : 'p-4 print:p-0'}`}>
           {children}
         </main>
 
