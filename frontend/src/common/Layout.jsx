@@ -2,12 +2,13 @@ import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import Navbar from "./Navbar";
+import { CartProvider } from "./CartContext";
 
 export default function Layout({ children }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const { pathname } = useLocation();
 
-  // Hide sidebar for POS and Inventory pages
+  // Hide sidebar for POS and Inventory pages - full width layout
   const isFullWidthPage = pathname === '/pos' || pathname === '/inventory-management';
 
   useEffect(() => {
@@ -19,33 +20,30 @@ export default function Layout({ children }) {
   }, [pathname]);
 
   return (
-    <div className={`flex h-screen overflow-hidden bg-gray-50 print:bg-white ${isFullWidthPage ? 'sidebar-hidden' : ''}`}>
+    <CartProvider>
+      <div className="flex h-screen overflow-hidden bg-gray-50">
+        {/* Sidebar - Fixed position when visible */}
+        {!isFullWidthPage && (
+          <div className={`shrink-0 transition-all duration-300 ${isSidebarOpen ? 'w-72' : 'w-0'}`}>
+            <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
+          </div>
+        )}
 
-      {/* SIDEBAR - Only show when not full width */}
-      {!isFullWidthPage && (
-        <div className="print:hidden">
-          <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
-        </div>
-      )}
-
-      {/* MAIN AREA */}
-      <div className={`flex-1 flex flex-col h-screen overflow-hidden ${isFullWidthPage ? 'w-full' : ''} print:h-auto print:overflow-visible`}>
-
-        {/* NAVBAR */}
-        <div className="print:hidden">
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col h-screen overflow-hidden min-w-0">
+          {/* Navbar */}
           <Navbar
             onOpenSidebar={() => setIsSidebarOpen(true)}
             isSidebarOpen={isSidebarOpen}
             isFullWidthPage={isFullWidthPage}
           />
+
+          {/* Page Content */}
+          <main className={`flex-1 overflow-y-auto custom-scrollbar bg-gray-50 ${isFullWidthPage ? 'p-0' : 'p-4'}`}>
+            {children}
+          </main>
         </div>
-
-        {/* PAGE CONTENT */}
-        <main className={`flex-1 overflow-y-auto custom-scrollbar print:overflow-visible ${isFullWidthPage ? 'p-2 print:p-0' : 'p-4 print:p-0'}`}>
-          {children}
-        </main>
-
       </div>
-    </div>
+    </CartProvider>
   );
 }

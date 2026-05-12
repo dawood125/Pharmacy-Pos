@@ -131,15 +131,15 @@ export default function Users() {
     setShowModal(true);
   };
 
-  const handleDelete = async (id) => {
-    if (window.confirm("Deactivate this user?")) {
+  const handleDelete = async (id, userName) => {
+    if (window.confirm(`Are you sure you want to deactivate "${userName}"? They will no longer be able to log in.`)) {
       try {
         await api.deleteUser(id);
-        addToast('User deactivated', 'success');
+        addToast('User deactivated successfully', 'success');
         fetchUsers();
         fetchStats();
       } catch (err) {
-        addToast(err.message || 'Failed to deactivate', 'error');
+        addToast(err.message || 'Failed to deactivate user', 'error');
       }
     }
   };
@@ -268,7 +268,7 @@ export default function Users() {
                       <button onClick={() => handleEdit(user)} className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg">
                         <Edit2 size={14} />
                       </button>
-                      <button onClick={() => handleDelete(user.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg">
+                      <button onClick={() => handleDelete(user.id, user.name)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg">
                         <Trash2 size={14} />
                       </button>
                     </div>

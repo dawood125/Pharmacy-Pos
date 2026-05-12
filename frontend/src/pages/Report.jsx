@@ -35,7 +35,8 @@ export default function PharmacyReports() {
     setLoading(true);
     try {
       if (activeTab === 'daily') {
-        const result = await api.getDailySales();
+        const today = new Date().toISOString().split('T')[0];
+        const result = await api.getDailySales(today);
         setData(prev => ({ ...prev, daily: result.sales || [] }));
       } else if (activeTab === 'profit') {
         const now = new Date();
@@ -134,6 +135,12 @@ export default function PharmacyReports() {
         ) : (
           <>
             {activeTab === "daily" && (
+              paginatedData.length === 0 ? (
+                <div className="py-16 text-center text-gray-400">
+                  <TrendingUp size={40} className="mx-auto mb-2 opacity-30" />
+                  <p className="text-sm font-medium">No sales found for today</p>
+                </div>
+              ) : (
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
@@ -156,9 +163,16 @@ export default function PharmacyReports() {
                   ))}
                 </tbody>
               </table>
+              )
             )}
 
             {activeTab === "profit" && (
+              paginatedData.length === 0 ? (
+                <div className="py-16 text-center text-gray-400">
+                  <DollarSign size={40} className="mx-auto mb-2 opacity-30" />
+                  <p className="text-sm font-medium">No profit data for this month</p>
+                </div>
+              ) : (
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
@@ -181,9 +195,16 @@ export default function PharmacyReports() {
                   ))}
                 </tbody>
               </table>
+              )
             )}
 
             {activeTab === "best" && (
+              paginatedData.length === 0 ? (
+                <div className="py-16 text-center text-gray-400">
+                  <Activity size={40} className="mx-auto mb-2 opacity-30" />
+                  <p className="text-sm font-medium">No best-selling data available</p>
+                </div>
+              ) : (
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
@@ -204,10 +225,34 @@ export default function PharmacyReports() {
                   ))}
                 </tbody>
               </table>
+              )
             )}
           </>
         )}
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2">
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+          >
+            Previous
+          </button>
+          <span className="px-3 py-1.5 text-sm font-bold">
+            Page {page} of {totalPages}
+          </span>
+          <button
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+          >
+            Next
+          </button>
+        </div>
+      )}
     </div>
   );
 }

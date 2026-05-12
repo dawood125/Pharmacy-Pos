@@ -76,14 +76,14 @@ export default function ProfessionalInventory() {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (window.confirm("Delete this item?")) {
+  const handleDelete = async (id, itemName) => {
+    if (window.confirm(`Are you sure you want to delete "${itemName}"? This action cannot be undone.`)) {
       try {
         await api.deleteProduct(id);
-        addToast('Product deleted', 'success');
+        addToast('Product deleted successfully', 'success');
         fetchInventory();
       } catch (err) {
-        addToast(err.message || 'Failed to delete', 'error');
+        addToast(err.message || 'Failed to delete product', 'error');
       }
     }
   };
@@ -202,7 +202,7 @@ export default function ProfessionalInventory() {
                         <button onClick={() => handleEdit(item)} className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg">
                           <Edit2 size={14} />
                         </button>
-                        <button onClick={() => handleDelete(item.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg">
+                        <button onClick={() => handleDelete(item.id, item.name)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg">
                           <Trash2 size={14} />
                         </button>
                       </div>

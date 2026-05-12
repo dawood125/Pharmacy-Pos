@@ -4,7 +4,14 @@
       "Bash(npm install *)",
       "Bash(dir node_modules)",
       "Bash(findstr /i \"sql\")",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5173)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5173)",
+      "Bash(Start-Sleep 5)",
+      "Bash(Get-Content \"C:\\\\Users\\\\YC\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--Website-development-Projects-Locals-clients-pharmacy-pos\\\\22022f79-886e-4c14-ba64-ffa15bb45167\\\\tasks\\\\bdo51oat8.output\" -Tail 20)",
+      "PowerShell($token = \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6ImFkbWluIiwiaWF0IjoxNzc4NjAzODYzLCJleHAiOjE3NzkyMDg2NjN9.UMYisWQLWjpCQoGn9zvBiPdMqFzs2QCyTGk_2zeewY4\"; $date = \\(Get-Date\\).ToString\\(\"yyyy-MM-dd\"\\); $response = Invoke-RestMethod -Uri \"http://localhost:5000/api/reports/daily?date=$date\" -Method GET -Headers @{Authorization=\"Bearer $token\"}; $response | ConvertTo-Json -Depth 5)",
+      "PowerShell($token = \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6ImFkbWluIiwiaWF0IjoxNzc4NjAzODYzLCJleHAiOjE3NzkyMDg2NjN9.UMYisWQLWjpCQoGn9zvBiPdMqFzs2QCyTGk_2zeewY4\"; $response = Invoke-RestMethod -Uri \"http://localhost:5000/api/products?search=tablet\" -Method GET -Headers @{Authorization=\"Bearer $token\"}; $response.products.name)",
+      "PowerShell($token = \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6ImFkbWluIiwiaWF0IjoxNzc4NjAzODYzLCJleHAiOjE3NzkyMDg2NjN9.UMYisWQLWjpCQoGn9zvBiPdMqFzs2QCyTGk_2zeewY4\"; $response = Invoke-RestMethod -Uri \"http://localhost:5000/api/users\" -Method GET -Headers @{Authorization=\"Bearer $token\"}; $response | ConvertTo-Json -Depth 5)",
+      "PowerShell($token = \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6ImFkbWluIiwiaWF0IjoxNzc4NjAzODYzLCJleHAiOjE3NzkyMDg2NjN9.UMYisWQLWjpCQoGn9zvBiPdMqFzs2QCyTGk_2zeewY4\"; $response = Invoke-RestMethod -Uri \"http://localhost:5000/api/reports/monthly?year=2026&month=5\" -Method GET -Headers @{Authorization=\"Bearer $token\"}; $response | ConvertTo-Json -Depth 5)",
+      "PowerShell($token = \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6ImFkbWluIiwiaWF0IjoxNzc4NjAzODYzLCJleHAiOjE3NzkyMDg2NjN9.UMYisWQLWjpCQoGn9zvBiPdMqFzs2QCyTGk_2zeewY4\"; $response = Invoke-RestMethod -Uri \"http://localhost:5000/api/reports/best-selling?limit=10\" -Method GET -Headers @{Authorization=\"Bearer $token\"}; $response | ConvertTo-Json -Depth 5)"
     ]
   }
 }

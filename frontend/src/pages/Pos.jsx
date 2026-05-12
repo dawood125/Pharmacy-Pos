@@ -1,31 +1,36 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
-import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, Wallet, Printer } from "lucide-react";
+import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, Wallet, Printer, X } from "lucide-react";
 import { api } from "../api/api";
 import { useToast } from "../common/Toast";
-import { useSettings } from "../common/SettingsContext";
+import { useCart } from "../common/CartContext";
 
 const Rs = (n) => `Rs ${Number(n || 0).toLocaleString()}`;
 const generateInvoice = () => `INV-${Date.now().toString().slice(-6)}`;
 
 export default function ProfessionalPOS() {
   const { addToast } = useToast();
-  const { settings } = useSettings();
+  const {
+    cart, setCart, addToCart, updateQty, removeItem, clearCart,
+    paymentMethod, setPaymentMethod, cash, setCash
+  } = useCart();
+
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   const [products, setProducts] = useState([]);
-  const [cart, setCart] = useState([]);
-  const [cash, setCash] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("Cash");
   const [invoiceNo, setInvoiceNo] = useState(generateInvoice());
   const [loading, setLoading] = useState(true);
   const [printing, setPrinting] = useState(false);
 
-  const fetchProducts = useCallback(async (searchTerm = "") => {
+  // Fetch products - no debounce needed for initial load
+  const fetchProducts = useCallback(async () => {
     try {
-      const data = await api.getProducts(searchTerm);
-      setProducts(data.products || []);
+      setLoading(true);
+      const data = await api.getProducts();
+      // Sort products alphabetically
+      const sorted = (data.products || []).sort((a, b) => a.name.localeCompare(b.name));
+      setProducts(sorted);
     } catch (err) {
-      console.error("Failed to fetch products:", err);
+      addToast('Failed to load products', 'error');
     } finally {
       setLoading(false);
     }
@@ -35,43 +40,40 @@ export default function ProfessionalPOS() {
     fetchProducts();
   }, [fetchProducts]);
 
+  // Fast debounce for search - 100ms for instant feel
   useEffect(() => {
-    const t = setTimeout(() => setDebounced(search), 200);
-    return () => clearTimeout(t);
+    const timer = setTimeout(async () => {
+      setDebounced(search);
+      if (search.trim()) {
+        const data = await api.getProducts(search);
+        const sorted = (data.products || []).sort((a, b) => a.name.localeCompare(b.name));
+        setProducts(sorted);
+      } else {
+        fetchProducts();
+      }
+    }, 100);
+    return () => clearTimeout(timer);
   }, [search]);
 
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKey = (e) => {
       if (e.key === "F1") { e.preventDefault(); document.getElementById("search")?.focus(); }
       if (e.ctrlKey && e.key === "p") { e.preventDefault(); handleCheckout(); }
+      if (e.key === "Escape" && cart.length > 0) { handleCancelCart(); }
+      if (e.ctrlKey && e.key === "x") { e.preventDefault(); handleCancelCart(); }
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [cart, cash, paymentMethod]);
 
-  const addToCart = (product) => {
-    if (product.quantity <= 0) return;
-    setCart(prev => {
-      const exist = prev.find(i => i.id === product.id);
-      if (exist) {
-        if (exist.qty >= product.quantity) return prev;
-        return prev.map(i => i.id === product.id ? { ...i, qty: i.qty + 1 } : i);
-      }
-      return [...prev, { id: product.id, name: product.name, price: product.sale_price, qty: 1, stock: product.quantity }];
-    });
+  const handleCancelCart = () => {
+    if (cart.length > 0 && window.confirm("Are you sure you want to cancel the cart? All items will be removed.")) {
+      clearCart();
+      setInvoiceNo(generateInvoice());
+      addToast('Cart cancelled', 'success');
+    }
   };
-
-  const updateQty = (id, delta, stock) => {
-    setCart(prev => prev.map(i => {
-      if (i.id === id) {
-        const newQty = i.qty + delta;
-        return (newQty > 0 && newQty <= stock) ? { ...i, qty: newQty } : i;
-      }
-      return i;
-    }));
-  };
-
-  const removeItem = (id) => setCart(prev => prev.filter(i => i.id !== id));
 
   const subtotal = useMemo(() => cart.reduce((a, i) => a + i.price * i.qty, 0), [cart]);
   const change = cash ? Number(cash) - subtotal : 0;
@@ -97,34 +99,25 @@ export default function ProfessionalPOS() {
 
       await api.createSale(saleData);
 
-      fetchProducts(debounced);
+      fetchProducts();
 
       // Print the receipt
-      setTimeout(() => {
-        window.print();
-        
-        addToast('Sale completed successfully!', 'success');
-        setCart([]);
-        setCash("");
-        setInvoiceNo(generateInvoice());
-        setPrinting(false);
-      }, 150);
-      
+      window.print();
+
+      addToast('Sale completed successfully!', 'success');
+      clearCart();
+      setInvoiceNo(generateInvoice());
     } catch (err) {
       addToast(err.message || "Failed to process sale", 'error');
+    } finally {
       setPrinting(false);
     }
   };
 
-  const filtered = products.filter(p =>
-    p.name.toLowerCase().includes(debounced.toLowerCase()) || (p.barcode && p.barcode.includes(debounced))
-  );
-
   return (
-    <div className="h-[calc(100vh-3rem)] grid grid-cols-1 lg:grid-cols-12 gap-3 fade-in print:h-auto print:block">
-
+    <div className="h-full flex gap-3 p-3">
       {/* PRODUCTS PANE */}
-      <div className="lg:col-span-5 bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col overflow-hidden print:hidden">
+      <div className="flex-1 bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col overflow-hidden">
         <div className="p-3 border-b border-gray-100">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
@@ -132,8 +125,9 @@ export default function ProfessionalPOS() {
               id="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search or scan barcode... (F1)"
-              className="w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:border-primary-400 focus:ring-4 focus:ring-primary-50 outline-none transition-all text-sm font-medium"
+              placeholder="Search product... (F1)"
+              autoFocus
+              className="w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:border-primary-400 outline-none transition-all text-sm font-medium"
             />
           </div>
         </div>
@@ -143,17 +137,21 @@ export default function ProfessionalPOS() {
             <div className="flex items-center justify-center h-full">
               <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
             </div>
+          ) : products.length === 0 ? (
+            <div className="flex items-center justify-center h-full text-gray-400">
+              <p className="text-sm">No products found</p>
+            </div>
           ) : (
             <div className="grid grid-cols-2 xl:grid-cols-3 gap-2">
-              {filtered.map((p) => (
+              {products.map((p) => (
                 <button
                   key={p.id}
                   onClick={() => addToCart(p)}
                   disabled={p.quantity <= 0}
-                  className={`relative p-3 rounded-xl border text-left transition-all active:scale-95 group ${
+                  className={`relative p-3 rounded-xl border text-left transition-all active:scale-95 ${
                     p.quantity <= 0
                       ? 'opacity-50 border-gray-100 bg-gray-50 cursor-not-allowed'
-                      : 'border-gray-100 bg-white hover:border-primary-200 hover:shadow-md'
+                      : 'border-gray-100 bg-white hover:border-primary-200 hover:shadow-md hover:bg-primary-50/30'
                   }`}
                 >
                   <span className="font-bold text-gray-900 text-sm line-clamp-2 block">
@@ -174,20 +172,24 @@ export default function ProfessionalPOS() {
       </div>
 
       {/* CART PANE */}
-      <div className="lg:col-span-4 bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col overflow-hidden print:hidden">
+      <div className="w-96 bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col overflow-hidden">
         <div className="p-3 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
           <div className="flex items-center gap-2">
             <ShoppingCart size={16} className="text-gray-500" />
             <h2 className="font-bold text-gray-900 text-sm">Current Cart</h2>
             {cart.length > 0 && (
               <span className="text-xs bg-primary-100 text-primary-700 px-2 py-0.5 rounded-full">
-                {cart.length} items
+                {cart.length}
               </span>
             )}
           </div>
           {cart.length > 0 && (
-            <button onClick={() => setCart([])} className="text-xs font-bold text-gray-400 hover:text-red-500 transition-colors">
-              Clear
+            <button
+              onClick={handleCancelCart}
+              className="text-xs font-bold text-gray-400 hover:text-red-500 transition-colors flex items-center gap-1"
+              title="Cancel (Esc)"
+            >
+              <X size={14} /> Cancel
             </button>
           )}
         </div>
@@ -236,17 +238,15 @@ export default function ProfessionalPOS() {
             </table>
           )}
         </div>
-      </div>
 
-      {/* PAYMENT PANE */}
-      <div className="lg:col-span-3 bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col print:hidden">
-        <div className="p-4 border-b border-gray-100">
-          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Total Amount</p>
-          <p className="text-3xl font-display font-black text-gray-900">{Rs(subtotal)}</p>
-        </div>
+        {/* PAYMENT SECTION */}
+        <div className="p-3 border-t border-gray-100">
+          <div className="flex justify-between items-center mb-3">
+            <p className="text-xs font-bold text-gray-400 uppercase">Total</p>
+            <p className="text-2xl font-black text-gray-900">{Rs(subtotal)}</p>
+          </div>
 
-        <div className="p-4 flex-1 flex flex-col gap-3">
-          <div className="grid grid-cols-4 gap-1.5">
+          <div className="grid grid-cols-4 gap-1 mb-3">
             {[
               { name: 'Cash', icon: Banknote },
               { name: 'EasyPaisa', icon: Wallet },
@@ -256,7 +256,7 @@ export default function ProfessionalPOS() {
               <button
                 key={method.name}
                 onClick={() => setPaymentMethod(method.name)}
-                className={`flex flex-col items-center justify-center gap-1 py-2 rounded-xl border text-xs font-bold transition-all ${
+                className={`flex flex-col items-center justify-center gap-1 py-2 rounded-xl border text-[10px] font-bold transition-all ${
                   paymentMethod === method.name
                     ? 'border-primary-500 bg-primary-50 text-primary-600'
                     : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
@@ -269,13 +269,13 @@ export default function ProfessionalPOS() {
           </div>
 
           {paymentMethod === 'Cash' && (
-            <div className="space-y-2">
+            <div className="space-y-2 mb-3">
               <input
                 type="number"
                 placeholder="Cash Received"
                 value={cash}
                 onChange={(e) => setCash(e.target.value)}
-                className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 focus:bg-white focus:border-primary-400 outline-none font-bold text-center text-lg"
+                className="w-full p-2 rounded-xl bg-gray-50 border border-gray-200 focus:bg-white focus:border-primary-400 outline-none font-bold text-center text-lg"
               />
               <div className="flex gap-1">
                 {[subtotal, 500, 1000, 2000, 5000].map(val => (
@@ -288,7 +288,6 @@ export default function ProfessionalPOS() {
                   </button>
                 ))}
               </div>
-
               <div className="flex justify-between items-center pt-2 border-t border-gray-100">
                 <span className="text-xs font-bold text-gray-400">Change</span>
                 <span className={`text-lg font-black ${change < 0 ? 'text-red-500' : 'text-primary-600'}`}>
@@ -308,18 +307,18 @@ export default function ProfessionalPOS() {
             ) : (
               <>
                 <Printer size={16} />
-                Print & Complete
+                Print & Complete (Ctrl+P)
               </>
             )}
           </button>
         </div>
       </div>
 
-      {/* PRINT RECEIPT - Hidden normally, shows on print */}
+      {/* PRINT RECEIPT */}
       <div className="hidden print:block w-[80mm] mx-auto p-3 text-black font-sans text-[11px] leading-tight">
         <div className="text-center mb-3 border-b-2 border-black pb-2">
-          <h1 className="text-lg font-black uppercase mb-1">{settings.storeName || 'MedFlow Pharmacy'}</h1>
-          <p className="text-[9px]">{settings.storeAddress || '123 Health Avenue, Medical City'}</p>
+          <h1 className="text-lg font-black uppercase mb-1">MedFlow Pharmacy</h1>
+          <p className="text-[9px]">123 Health Avenue, Medical City</p>
           <div className="mt-1 text-left text-[9px]">
             <p>Invoice: {invoiceNo}</p>
             <p>Date: {new Date().toLocaleString()}</p>
