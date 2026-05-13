@@ -1,28 +1,34 @@
-import { dbAll, dbGet, dbRun, dbExec } from '../config/db.js';
+import { dbAll, dbGet, dbRun } from '../config/db.js';
 
 export const getProducts = async (req, res) => {
   try {
     const { search, page = 1, limit = 50 } = req.query;
-    const offset = (page - 1) * limit;
+    const offset = (Number(page) - 1) * Number(limit);
+    const lim = parseInt(limit, 10);
+    const off = Math.max(0, parseInt(offset, 10));
 
+    const params = [];
     let query = "SELECT * FROM products WHERE status = 'active'";
     let countQuery = "SELECT COUNT(*) as total FROM products WHERE status = 'active'";
 
-    if (search) {
-      const searchTerm = `%${search}%`;
-      query += ` AND (name LIKE '${searchTerm}' OR barcode LIKE '${searchTerm}')`;
-      countQuery += ` AND (name LIKE '${searchTerm}' OR barcode LIKE '${searchTerm}')`;
+    if (search && String(search).trim()) {
+      const term = `%${String(search).trim()}%`;
+      query += ' AND (name LIKE ? OR barcode LIKE ?)';
+      countQuery += ' AND (name LIKE ? OR barcode LIKE ?)';
+      params.push(term, term);
     }
 
-    query += ` ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`;
+    query += search && String(search).trim()
+      ? ' ORDER BY name ASC LIMIT ? OFFSET ?'
+      : ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
 
-    const products = dbAll(query);
-    const { total } = dbGet(countQuery);
+    const products = dbAll(query, [...params, lim, off]);
+    const { total } = dbGet(countQuery, params);
 
     res.json({
       products,
-      totalPages: Math.ceil(total / limit),
-      currentPage: parseInt(page),
+      totalPages: Math.ceil(total / lim) || 1,
+      currentPage: parseInt(page, 10),
       total
     });
   } catch (error) {
@@ -51,7 +57,9 @@ export const createProduct = async (req, res) => {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [name, barcode || null, batchNumber || null, category || null, purchasePrice, salePrice, quantity || 0, expiryDate || null, lowStockThreshold || 10]);
 
-    const product = dbGet('SELECT * FROM products WHERE id = ?', [db.exec("SELECT last_insert_rowid()")[0].values[0][0]]);
+    const { id } = dbGet('SELECT last_insert_rowid() as id');
+    const newId = typeof id === 'bigint' ? Number(id) : id;
+    const product = dbGet('SELECT * FROM products WHERE id = ?', [newId]);
     res.status(201).json(product);
   } catch (error) {
     res.status(400).json({ message: error.message });

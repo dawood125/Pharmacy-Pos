@@ -40,8 +40,10 @@ export const api = {
   },
 
   // Products
-  getProducts: async (search = '', page = 1) => {
-    const res = await fetch(`${API_BASE}/products?search=${search}&page=${page}`, { headers: headers() });
+  getProducts: async (search = '', page = 1, limit = 50) => {
+    const q = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (search) q.set('search', search);
+    const res = await fetch(`${API_BASE}/products?${q}`, { headers: headers() });
     return handleResponse(res);
   },
 
@@ -93,8 +95,8 @@ export const api = {
     return handleResponse(res);
   },
 
-  getSales: async (page = 1, startDate, endDate) => {
-    let url = `${API_BASE}/sales?page=${page}`;
+  getSales: async (page = 1, startDate, endDate, limit = 50) => {
+    let url = `${API_BASE}/sales?page=${page}&limit=${limit}`;
     if (startDate && endDate) url += `&startDate=${startDate}&endDate=${endDate}`;
     const res = await fetch(url, { headers: headers() });
     return handleResponse(res);

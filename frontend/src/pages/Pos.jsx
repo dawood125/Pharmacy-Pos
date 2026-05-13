@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, Wallet, Printer, X } from "lucide-react";
 import { api } from "../api/api";
 import { useToast } from "../common/Toast";
@@ -6,27 +6,30 @@ import { useCart } from "../common/CartContext";
 
 const Rs = (n) => `Rs ${Number(n || 0).toLocaleString()}`;
 const generateInvoice = () => `INV-${Date.now().toString().slice(-6)}`;
+const SUGGEST_LIMIT = 15;
+const GRID_PAGE_SIZE = 100;
 
 export default function ProfessionalPOS() {
   const { addToast } = useToast();
   const {
-    cart, setCart, addToCart, updateQty, removeItem, clearCart,
+    cart, addToCart, updateQty, removeItem, clearCart,
     paymentMethod, setPaymentMethod, cash, setCash
   } = useCart();
 
   const [search, setSearch] = useState("");
-  const [debounced, setDebounced] = useState("");
   const [products, setProducts] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [highlightIndex, setHighlightIndex] = useState(-1);
   const [invoiceNo, setInvoiceNo] = useState(generateInvoice());
   const [loading, setLoading] = useState(true);
   const [printing, setPrinting] = useState(false);
+  const searchWrapRef = useRef(null);
 
-  // Fetch products - no debounce needed for initial load
   const fetchProducts = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await api.getProducts();
-      // Sort products alphabetically
+      const data = await api.getProducts("", 1, GRID_PAGE_SIZE);
       const sorted = (data.products || []).sort((a, b) => a.name.localeCompare(b.name));
       setProducts(sorted);
     } catch (err) {
@@ -34,28 +37,60 @@ export default function ProfessionalPOS() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [addToast]);
 
   useEffect(() => {
     fetchProducts();
   }, [fetchProducts]);
 
-  // Fast debounce for search - 100ms for instant feel
   useEffect(() => {
+    const q = search.trim();
+    if (!q) {
+      setSuggestions([]);
+      setHighlightIndex(-1);
+      setSuggestLoading(false);
+      fetchProducts();
+      return;
+    }
+
+    setSuggestLoading(true);
     const timer = setTimeout(async () => {
-      setDebounced(search);
-      if (search.trim()) {
-        const data = await api.getProducts(search);
+      try {
+        const data = await api.getProducts(q, 1, SUGGEST_LIMIT);
         const sorted = (data.products || []).sort((a, b) => a.name.localeCompare(b.name));
+        setSuggestions(sorted);
+        setHighlightIndex(sorted.length ? 0 : -1);
         setProducts(sorted);
-      } else {
-        fetchProducts();
+      } catch {
+        addToast('Search failed', 'error');
+        setSuggestions([]);
+      } finally {
+        setSuggestLoading(false);
       }
     }, 100);
-    return () => clearTimeout(timer);
-  }, [search]);
 
-  // Keyboard shortcuts
+    return () => clearTimeout(timer);
+  }, [search, fetchProducts, addToast]);
+
+  useEffect(() => {
+    const onDocClick = (e) => {
+      if (searchWrapRef.current && !searchWrapRef.current.contains(e.target)) {
+        setHighlightIndex(-1);
+      }
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
+  const pickSuggestion = useCallback((p) => {
+    if (p.quantity > 0) addToCart(p);
+    else addToast("Out of stock", "warning");
+    setSearch("");
+    setSuggestions([]);
+    setHighlightIndex(-1);
+    fetchProducts();
+  }, [addToCart, addToast, fetchProducts]);
+
   useEffect(() => {
     const handleKey = (e) => {
       if (e.key === "F1") { e.preventDefault(); document.getElementById("search")?.focus(); }
@@ -66,6 +101,24 @@ export default function ProfessionalPOS() {
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [cart, cash, paymentMethod]);
+
+  const handleSearchKeyDown = (e) => {
+    if (!suggestions.length) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlightIndex((i) => Math.min(suggestions.length - 1, i + 1 < 0 ? 0 : i + 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlightIndex((i) => Math.max(0, i - 1));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const idx = highlightIndex >= 0 ? highlightIndex : 0;
+      if (suggestions[idx]) pickSuggestion(suggestions[idx]);
+    } else if (e.key === "Escape") {
+      setSuggestions([]);
+      setHighlightIndex(-1);
+    }
+  };
 
   const handleCancelCart = () => {
     if (cart.length > 0 && window.confirm("Are you sure you want to cancel the cart? All items will be removed.")) {
@@ -101,12 +154,13 @@ export default function ProfessionalPOS() {
 
       fetchProducts();
 
-      // Print the receipt
       window.print();
 
       addToast('Sale completed successfully!', 'success');
       clearCart();
       setInvoiceNo(generateInvoice());
+      setSearch("");
+      setSuggestions([]);
     } catch (err) {
       addToast(err.message || "Failed to process sale", 'error');
     } finally {
@@ -114,21 +168,49 @@ export default function ProfessionalPOS() {
     }
   };
 
+  const showDropdown = search.trim().length > 0 && (suggestLoading || suggestions.length > 0);
+
   return (
     <div className="h-full flex gap-3 p-3">
-      {/* PRODUCTS PANE */}
       <div className="flex-1 bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col overflow-hidden">
-        <div className="p-3 border-b border-gray-100">
+        <div className="p-3 border-b border-gray-100 relative z-20" ref={searchWrapRef}>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
             <input
               id="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
               placeholder="Search product... (F1)"
+              autoComplete="off"
               autoFocus
               className="w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:border-primary-400 outline-none transition-all text-sm font-medium"
             />
+            {showDropdown && (
+              <ul className="absolute left-0 right-0 top-full mt-1 max-h-64 overflow-y-auto bg-white border border-gray-200 rounded-xl shadow-lg z-30 custom-scrollbar">
+                {suggestLoading && suggestions.length === 0 && (
+                  <li className="px-3 py-2 text-xs text-gray-500">Searching…</li>
+                )}
+                {suggestions.map((p, idx) => (
+                  <li key={p.id}>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => pickSuggestion(p)}
+                      className={`w-full text-left px-3 py-2 flex items-center justify-between gap-2 text-sm ${
+                        idx === highlightIndex ? "bg-primary-50" : "hover:bg-gray-50"
+                      } ${p.quantity <= 0 ? "opacity-50" : ""}`}
+                    >
+                      <span className="font-semibold text-gray-900 truncate">{p.name}</span>
+                      <span className="shrink-0 text-xs font-black text-primary-600">{Rs(p.sale_price)}</span>
+                    </button>
+                  </li>
+                ))}
+                {!suggestLoading && suggestions.length === 0 && (
+                  <li className="px-3 py-2 text-xs text-gray-500">No matches</li>
+                )}
+              </ul>
+            )}
           </div>
         </div>
 
@@ -171,7 +253,6 @@ export default function ProfessionalPOS() {
         </div>
       </div>
 
-      {/* CART PANE */}
       <div className="w-96 bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col overflow-hidden">
         <div className="p-3 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
           <div className="flex items-center gap-2">
@@ -239,7 +320,6 @@ export default function ProfessionalPOS() {
           )}
         </div>
 
-        {/* PAYMENT SECTION */}
         <div className="p-3 border-t border-gray-100">
           <div className="flex justify-between items-center mb-3">
             <p className="text-xs font-bold text-gray-400 uppercase">Total</p>
@@ -314,7 +394,6 @@ export default function ProfessionalPOS() {
         </div>
       </div>
 
-      {/* PRINT RECEIPT */}
       <div className="hidden print:block w-[80mm] mx-auto p-3 text-black font-sans text-[11px] leading-tight">
         <div className="text-center mb-3 border-b-2 border-black pb-2">
           <h1 className="text-lg font-black uppercase mb-1">MedFlow Pharmacy</h1>

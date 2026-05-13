@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from "react";
-import { Download, Printer, TrendingUp, DollarSign, Activity, AlertTriangle, CalendarDays } from "lucide-react";
+import { Download, Printer, TrendingUp, DollarSign, Activity } from "lucide-react";
 import { api } from "../api/api";
 import { useToast } from "../common/Toast";
 
@@ -25,6 +25,7 @@ export default function PharmacyReports() {
   const [activeTab, setActiveTab] = useState("daily");
   const [page, setPage] = useState(1);
   const [data, setData] = useState({ daily: [], profit: [], best: [] });
+  const [meta, setMeta] = useState({ dailySummary: null, monthlySummary: null });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -38,10 +39,12 @@ export default function PharmacyReports() {
         const today = new Date().toISOString().split('T')[0];
         const result = await api.getDailySales(today);
         setData(prev => ({ ...prev, daily: result.sales || [] }));
+        setMeta(prev => ({ ...prev, dailySummary: result.summary || null }));
       } else if (activeTab === 'profit') {
         const now = new Date();
         const result = await api.getMonthlyReport(now.getFullYear(), now.getMonth() + 1);
         setData(prev => ({ ...prev, profit: result.dailyData || [] }));
+        setMeta(prev => ({ ...prev, monthlySummary: result.summary || null }));
       } else if (activeTab === 'best') {
         const result = await api.getBestSelling(20);
         setData(prev => ({ ...prev, best: result || [] }));
@@ -69,8 +72,11 @@ export default function PharmacyReports() {
     return currentData.slice(start, start + ITEMS_PER_PAGE);
   }, [page, activeTab, currentData]);
 
-  const totalSales = data.daily.reduce((acc, item) => acc + (item.total_amount || 0), 0);
-  const totalProfit = totalSales * 0.25;
+  const dailySummary = meta.dailySummary;
+  const monthlySummary = meta.monthlySummary;
+
+  const totalRevenueDaily = dailySummary?.totalRevenue ?? 0;
+  const totalProfitDaily = dailySummary?.totalProfit ?? 0;
 
   const tabs = [
     { key: "daily", label: "Daily Sales", icon: TrendingUp },
@@ -102,11 +108,32 @@ export default function PharmacyReports() {
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
             <p className="text-xs font-bold text-gray-400 uppercase">Total Revenue</p>
-            <p className="text-2xl font-black text-primary-600 mt-1">{Rs(totalSales)}</p>
+            <p className="text-2xl font-black text-primary-600 mt-1">{Rs(totalRevenueDaily)}</p>
           </div>
           <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-            <p className="text-xs font-bold text-gray-400 uppercase">Est. Profit</p>
-            <p className="text-2xl font-black text-emerald-600 mt-1">{Rs(totalProfit)}</p>
+            <p className="text-xs font-bold text-gray-400 uppercase">Gross profit</p>
+            <p className="text-2xl font-black text-emerald-600 mt-1">{Rs(totalProfitDaily)}</p>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "profit" && monthlySummary && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+            <p className="text-xs font-bold text-gray-400 uppercase">Month revenue</p>
+            <p className="text-xl font-black text-primary-600 mt-1">{Rs(monthlySummary.totalRevenue)}</p>
+          </div>
+          <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+            <p className="text-xs font-bold text-gray-400 uppercase">Month cost</p>
+            <p className="text-xl font-black text-rose-600 mt-1">{Rs(monthlySummary.totalCost)}</p>
+          </div>
+          <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+            <p className="text-xs font-bold text-gray-400 uppercase">Month profit</p>
+            <p className="text-xl font-black text-emerald-600 mt-1">{Rs(monthlySummary.totalProfit)}</p>
+          </div>
+          <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+            <p className="text-xs font-bold text-gray-400 uppercase">Transactions</p>
+            <p className="text-xl font-black text-gray-900 mt-1">{monthlySummary.totalTransactions}</p>
           </div>
         </div>
       )}
@@ -158,7 +185,7 @@ export default function PharmacyReports() {
                       <td className="px-4 py-3 font-bold text-sm">{item.invoice_number}</td>
                       <td className="px-4 py-3 text-center"><span className="bg-gray-100 px-2 py-1 rounded text-xs font-bold">{item.items?.length || 0}</span></td>
                       <td className="px-4 py-3 text-right font-black text-primary-600">{Rs(item.total_amount)}</td>
-                      <td className="px-4 py-3 text-right font-black text-emerald-600">{Rs(item.total_amount * 0.25)}</td>
+                      <td className="px-4 py-3 text-right font-black text-emerald-600">{Rs(item.profit ?? 0)}</td>
                     </tr>
                   ))}
                 </tbody>

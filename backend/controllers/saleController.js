@@ -1,4 +1,4 @@
-import { dbGet, dbRun, dbAll, saveDatabase } from '../config/db.js';
+import { dbGet, dbRun, dbAll } from '../config/db.js';
 
 const generateInvoiceNumber = () => {
   return `INV-${Date.now().toString().slice(-6)}`;
@@ -36,6 +36,8 @@ export const createSale = async (req, res) => {
         productName: product.name,
         quantity: item.qty,
         unitPrice: product.sale_price,
+        unitPurchasePrice: Number(product.purchase_price) || 0,
+        returnedQty: 0,
         totalPrice: itemTotal
       });
     }
@@ -62,29 +64,31 @@ export const createSale = async (req, res) => {
 
 export const getSales = async (req, res) => {
   try {
-    const { page = 1, limit = 20, startDate, endDate } = req.query;
-    const offset = (page - 1) * limit;
+    const { page = 1, limit = 50, startDate, endDate } = req.query;
+    const offset = (Number(page) - 1) * Number(limit);
 
     let query = 'SELECT s.*, u.name as cashier_name FROM sales s LEFT JOIN users u ON s.cashier_id = u.id';
     let countQuery = 'SELECT COUNT(*) as total FROM sales';
+    const dateParams = [];
 
     if (startDate && endDate) {
-      query += ` WHERE s.created_at >= '${startDate}' AND s.created_at <= '${endDate}'`;
-      countQuery += ` WHERE created_at >= '${startDate}' AND created_at <= '${endDate}'`;
+      query += ' WHERE s.created_at >= ? AND s.created_at <= ?';
+      countQuery += ' WHERE created_at >= ? AND created_at <= ?';
+      dateParams.push(startDate, `${endDate}T23:59:59.999`);
     }
 
-    query += ` ORDER BY s.created_at DESC LIMIT ${limit} OFFSET ${offset}`;
+    query += ' ORDER BY s.created_at DESC LIMIT ? OFFSET ?';
 
-    const sales = dbAll(query).map(sale => ({
+    const sales = dbAll(query, [...dateParams, parseInt(limit, 10), offset]).map(sale => ({
       ...sale,
       items: sale.items ? JSON.parse(sale.items) : []
     }));
 
-    const { total } = dbGet(countQuery);
+    const { total } = dbGet(countQuery, dateParams);
 
     res.json({
       sales,
-      totalPages: Math.ceil(total / limit),
+      totalPages: Math.ceil(total / parseInt(limit, 10)) || 1,
       currentPage: parseInt(page),
       total
     });
