@@ -4,7 +4,12 @@ import { api } from "../api/api";
 import { useToast } from "../common/Toast";
 import { useSettings } from "../common/SettingsContext";
 
-const Rs = (n) => `Rs ${Number(n).toLocaleString()}`;
+const Rs = (n) => {
+  const x = Number(n);
+  return `Rs ${(Number.isFinite(x) ? x : 0).toLocaleString()}`;
+};
+
+const LIST_PAGE_SIZE = 15;
 
 function returnableQty(item) {
   const sold = Number(item.quantity) || 0;
@@ -21,20 +26,30 @@ function statusLabel(status) {
 export default function CustomerReturnSystem() {
   const { addToast } = useToast();
   const { settings } = useSettings();
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [searchDebounced, setSearchDebounced] = useState("");
+  const [listPage, setListPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [sales, setSales] = useState([]);
   const [invoice, setInvoice] = useState(null);
   const [returnQtys, setReturnQtys] = useState({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchSales();
-  }, []);
+    const t = setTimeout(() => setSearchDebounced(searchInput.trim()), 400);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  useEffect(() => {
+    setListPage(1);
+  }, [searchDebounced]);
 
   const fetchSales = async () => {
     try {
-      const data = await api.getSales(1, undefined, undefined, 100);
+      setLoading(true);
+      const data = await api.getSales(listPage, undefined, undefined, LIST_PAGE_SIZE, searchDebounced);
       setSales(data.sales || []);
+      setTotalPages(Math.max(1, data.totalPages || 1));
     } catch (err) {
       addToast('Failed to load sales', 'error');
     } finally {
@@ -42,10 +57,13 @@ export default function CustomerReturnSystem() {
     }
   };
 
-  const filteredSales = sales.filter((sale) =>
-    sale.invoice_number.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
-    (sale.customer_name && sale.customer_name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
-  );
+  useEffect(() => {
+    if (invoice) {
+      setLoading(false);
+      return;
+    }
+    fetchSales();
+  }, [listPage, searchDebounced, invoice]);
 
   const handleSelectInvoice = (selectedInvoice) => {
     setInvoice(selectedInvoice);
@@ -127,8 +145,8 @@ export default function CustomerReturnSystem() {
             <input
               type="text"
               placeholder="Search invoice..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-primary-400"
             />
           </div>
@@ -153,7 +171,7 @@ export default function CustomerReturnSystem() {
                     <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
                   </td>
                 </tr>
-              ) : filteredSales.length === 0 ? (
+              ) : sales.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-12 text-center text-gray-400">
                     <FileText size={32} className="mx-auto mb-2 opacity-30" />
@@ -161,7 +179,7 @@ export default function CustomerReturnSystem() {
                   </td>
                 </tr>
               ) : (
-                filteredSales.map((sale) => {
+                sales.map((sale) => {
                   const st = statusLabel(sale.status);
                   return (
                     <tr key={sale.id} onClick={() => handleSelectInvoice(sale)} className="hover:bg-gray-50 cursor-pointer">
@@ -197,6 +215,28 @@ export default function CustomerReturnSystem() {
             </tbody>
           </table>
         </div>
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center gap-2 py-3">
+            <button
+              type="button"
+              disabled={listPage <= 1 || loading}
+              onClick={() => setListPage((p) => Math.max(1, p - 1))}
+              className="px-3 py-1.5 text-sm font-semibold border border-gray-200 rounded-lg disabled:opacity-40"
+            >
+              Previous
+            </button>
+            <span className="text-sm text-gray-600">Page {listPage} / {totalPages}</span>
+            <button
+              type="button"
+              disabled={listPage >= totalPages || loading}
+              onClick={() => setListPage((p) => Math.min(totalPages, p + 1))}
+              className="px-3 py-1.5 text-sm font-semibold border border-gray-200 rounded-lg disabled:opacity-40"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
     );
   }

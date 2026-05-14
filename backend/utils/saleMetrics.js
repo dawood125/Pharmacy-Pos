@@ -1,21 +1,26 @@
 import { dbAll } from '../config/db.js';
 
+function safeNum(v, fallback = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 /** Remaining sold quantity (original sold minus returned). */
 export function itemNetQuantity(item) {
-  const sold = Number(item.quantity) || 0;
-  const ret = Number(item.returnedQty) || 0;
+  const sold = safeNum(item.quantity, 0);
+  const ret = safeNum(item.returnedQty, 0);
   return Math.max(0, sold - ret);
 }
 
 export function lineRevenue(item) {
-  return (Number(item.unitPrice) || 0) * itemNetQuantity(item);
+  return safeNum(item.unitPrice, 0) * itemNetQuantity(item);
 }
 
 export function lineCost(item, purchaseFallback = 0) {
   const up =
     item.unitPurchasePrice != null && item.unitPurchasePrice !== ''
-      ? Number(item.unitPurchasePrice)
-      : Number(purchaseFallback) || 0;
+      ? safeNum(item.unitPurchasePrice, 0)
+      : safeNum(purchaseFallback, 0);
   return up * itemNetQuantity(item);
 }
 
@@ -45,22 +50,31 @@ export function fetchPurchasePriceMap(productIds) {
   const rows = dbAll(`SELECT id, purchase_price FROM products WHERE id IN (${placeholders})`, productIds);
   const map = {};
   for (const r of rows) {
-    map[r.id] = r.purchase_price;
+    map[r.id] = safeNum(r.purchase_price, 0);
   }
   return map;
 }
 
-/** Net revenue, COGS, and gross profit for one sale row (uses DB sale.items JSON). */
+/**
+ * Net revenue, COGS, and gross profit for one sale.
+ * Revenue uses stored total_amount (net of returns) when valid so it stays aligned with POS totals.
+ */
 export function profitFromSaleRow(sale, purchaseMap = {}) {
   const items = parseSaleItems(sale);
-  let revenue = 0;
   let cost = 0;
+  let lineRevenueSum = 0;
   for (const it of items) {
-    const fallback = purchaseMap[it.product] ?? 0;
-    revenue += lineRevenue(it);
-    cost += lineCost(it, fallback);
+    lineRevenueSum += lineRevenue(it);
+    cost += lineCost(it, purchaseMap[it.product] ?? 0);
   }
-  return { revenue, cost, profit: revenue - cost };
+  const storedTotal = safeNum(sale.total_amount, NaN);
+  const revenue = Number.isFinite(storedTotal) ? storedTotal : lineRevenueSum;
+  const profit = revenue - cost;
+  return {
+    revenue,
+    cost,
+    profit: Number.isFinite(profit) ? profit : 0
+  };
 }
 
 export function sumSalesProfit(sales) {
@@ -75,5 +89,12 @@ export function sumSalesProfit(sales) {
   for (const s of sales) {
     profit += profitFromSaleRow(s, purchaseMap).profit;
   }
-  return profit;
+  return Number.isFinite(profit) ? profit : 0;
+}
+
+/** Calendar YYYY-MM-DD from SQLite created_at (handles "..." or "...T..."). */
+export function saleCalendarDay(createdAt) {
+  if (createdAt == null) return '';
+  const s = String(createdAt);
+  return s.length >= 10 ? s.slice(0, 10) : s;
 }

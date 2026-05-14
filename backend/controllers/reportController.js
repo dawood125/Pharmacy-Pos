@@ -7,8 +7,19 @@ import {
   sumSalesProfit,
   itemNetQuantity,
   lineRevenue,
-  lineCost
+  lineCost,
+  saleCalendarDay
 } from '../utils/saleMetrics.js';
+
+/** Last calendar day of month (month is 1–12). Local date, no UTC shift. */
+function lastDayOfCalendarMonth(year, month) {
+  const y = Number(year);
+  const m = Number(month);
+  const d = new Date(y, m, 0);
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
 
 const SALE_STATUSES_SQL = `status IN ('completed', 'partially_returned', 'fully_returned')`;
 
@@ -37,16 +48,16 @@ export const getDailySales = async (req, res) => {
 
     const purchaseMap = buildPurchaseMapForSales(sales);
 
-    const totalRevenue = sales.reduce((sum, sale) => sum + sale.total_amount, 0);
+    const totalRevenue = sales.reduce((sum, sale) => sum + Number(sale.total_amount || 0), 0);
     const totalProfit = sumSalesProfit(sales);
 
     const salesWithItems = sales.map(sale => {
-      const items = sale.items ? JSON.parse(sale.items) : [];
+      const items = parseSaleItems(sale);
       const { profit } = profitFromSaleRow({ ...sale, items }, purchaseMap);
       return {
         ...sale,
         items,
-        profit
+        profit: Number.isFinite(profit) ? profit : 0
       };
     });
 
@@ -65,9 +76,14 @@ export const getDailySales = async (req, res) => {
 
 export const getMonthlyReport = async (req, res) => {
   try {
-    const { year, month } = req.query;
-    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-    const endDate = new Date(year, month, 0).toISOString().split('T')[0];
+    const now = new Date();
+    let y = Number(req.query.year);
+    let m = Number(req.query.month);
+    if (!Number.isFinite(y) || y < 2000) y = now.getFullYear();
+    if (!Number.isFinite(m) || m < 1 || m > 12) m = now.getMonth() + 1;
+
+    const startDate = `${y}-${String(m).padStart(2, '0')}-01`;
+    const endDate = lastDayOfCalendarMonth(y, m);
 
     const sales = dbAll(
       `
@@ -82,9 +98,10 @@ export const getMonthlyReport = async (req, res) => {
     const dailyMap = new Map();
 
     sales.forEach(sale => {
-      const day = sale.created_at.split('T')[0];
+      const day = saleCalendarDay(sale.created_at);
+      if (!day) return;
       const items = parseSaleItems(sale);
-      const revenue = sale.total_amount;
+      const revenue = Number(sale.total_amount || 0);
       const cost = items.reduce(
         (sum, item) => sum + lineCost(item, purchaseMap[item.product] ?? 0),
         0
@@ -101,16 +118,20 @@ export const getMonthlyReport = async (req, res) => {
 
     const dailyData = [];
     dailyMap.forEach((value, key) => {
+      const margin =
+        value.revenue > 0 && Number.isFinite(value.profit)
+          ? ((value.profit / value.revenue) * 100).toFixed(1)
+          : '0';
       dailyData.push({
         date: key,
         ...value,
-        margin: value.revenue > 0 ? ((value.profit / value.revenue) * 100).toFixed(1) : 0
+        margin
       });
     });
 
     dailyData.sort((a, b) => a.date.localeCompare(b.date));
 
-    const totalRevenue = sales.reduce((sum, s) => sum + s.total_amount, 0);
+    const totalRevenue = sales.reduce((sum, s) => sum + Number(s.total_amount || 0), 0);
     const totalCost = sales.reduce((sum, s) => {
       const items = parseSaleItems(s);
       return sum + items.reduce(
@@ -125,7 +146,9 @@ export const getMonthlyReport = async (req, res) => {
         totalRevenue,
         totalCost,
         totalProfit: totalRevenue - totalCost,
-        margin: totalRevenue > 0 ? (((totalRevenue - totalCost) / totalRevenue) * 100).toFixed(1) : 0,
+        margin: totalRevenue > 0 && Number.isFinite(totalRevenue - totalCost)
+          ? (((totalRevenue - totalCost) / totalRevenue) * 100).toFixed(1)
+          : '0',
         totalTransactions: sales.length
       }
     });
@@ -187,10 +210,10 @@ export const getDashboardStats = async (req, res) => {
       [today]
     );
 
-    const todayRevenue = todaySales.reduce((sum, s) => sum + s.total_amount, 0);
+    const todayRevenue = todaySales.reduce((sum, s) => sum + Number(s.total_amount || 0), 0);
     const todayProfit = sumSalesProfit(todaySales);
-    const todayMarginPct =
-      todayRevenue > 0 ? ((todayProfit / todayRevenue) * 100).toFixed(1) : '0';
+    const marginRaw = todayRevenue > 0 ? (todayProfit / todayRevenue) * 100 : 0;
+    const todayMarginPct = Number.isFinite(marginRaw) ? marginRaw.toFixed(1) : '0';
 
     const lowStock = dbAll(`
       SELECT * FROM products

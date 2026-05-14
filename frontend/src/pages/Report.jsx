@@ -4,7 +4,10 @@ import { api } from "../api/api";
 import { useToast } from "../common/Toast";
 
 const ITEMS_PER_PAGE = 15;
-const Rs = (n) => `Rs ${Number(n).toLocaleString()}`;
+const Rs = (n) => {
+  const x = Number(n);
+  return `Rs ${(Number.isFinite(x) ? x : 0).toLocaleString()}`;
+};
 
 const downloadCSV = (data, filename) => {
   if (!data?.length) return;

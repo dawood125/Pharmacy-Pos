@@ -1,9 +1,23 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { PlusCircle, Edit2, Trash2, Search, Package, X } from "lucide-react";
 import { api } from "../api/api";
 import { useToast } from "../common/Toast";
 
-const Rs = (n) => `Rs ${Number(n || 0).toLocaleString()}`;
+const Rs = (n) => {
+  const x = Number(n);
+  return `Rs ${(Number.isFinite(x) ? x : 0).toLocaleString()}`;
+};
+
+const PAGE_SIZE = 15;
+
+function todayYmd() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function expiryYmd(item) {
+  if (!item.expiry_date) return null;
+  return String(item.expiry_date).slice(0, 10);
+}
 
 export default function ProfessionalInventory() {
   const { addToast } = useToast();
@@ -14,28 +28,36 @@ export default function ProfessionalInventory() {
   const [inventory, setInventory] = useState([]);
   const [editId, setEditId] = useState(null);
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
 
-  useEffect(() => {
-    fetchInventory();
-  }, []);
-
-  const fetchInventory = async () => {
+  const fetchInventory = useCallback(async () => {
     try {
-      const data = await api.getProducts(search);
+      setLoading(true);
+      const data = await api.getProducts(search, page, PAGE_SIZE);
       setInventory(data.products || []);
+      setTotalPages(Math.max(1, data.totalPages || 1));
+      setTotal(data.total ?? 0);
     } catch (err) {
       addToast('Failed to load inventory', 'error');
     } finally {
       setLoading(false);
     }
-  };
+  }, [search, page, addToast]);
 
   useEffect(() => {
-    const timer = setTimeout(() => fetchInventory(), 300);
-    return () => clearTimeout(timer);
+    setPage(1);
   }, [search]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchInventory();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search, page, fetchInventory]);
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
@@ -105,27 +127,35 @@ export default function ProfessionalInventory() {
   };
 
   const getStatus = (item) => {
-    const today = new Date();
-    const expiryDate = item.expiry_date ? new Date(item.expiry_date) : null;
-    if (!expiryDate) {
-      if (item.quantity <= 0) return { label: "Out", color: "bg-red-50 text-red-600" };
-      if (item.quantity < (item.low_stock_threshold || 10)) return { label: "Low", color: "bg-orange-50 text-orange-600" };
-      return null;
+    const today = todayYmd();
+    const exp = expiryYmd(item);
+
+    if (item.quantity <= 0) {
+      return { label: "Out", color: "bg-red-50 text-red-600" };
     }
-    const diffMonths = (expiryDate - today) / (1000 * 60 * 60 * 24 * 30);
-    if (item.quantity <= 0) return { label: "Out", color: "bg-red-50 text-red-600" };
-    if (item.quantity < (item.low_stock_threshold || 10)) return { label: "Low", color: "bg-orange-50 text-orange-600" };
-    if (diffMonths < 3) return { label: "Expiring", color: "bg-amber-50 text-amber-600" };
+    if (item.quantity < (item.low_stock_threshold || 10)) {
+      return { label: "Low", color: "bg-orange-50 text-orange-600" };
+    }
+    if (exp && exp < today) {
+      return { label: "Expired batch", color: "bg-red-100 text-red-800" };
+    }
+    if (exp) {
+      const expMid = new Date(`${exp}T12:00:00`);
+      const tMid = new Date(`${today}T12:00:00`);
+      const daysUntil = (expMid - tMid) / (1000 * 60 * 60 * 24);
+      if (daysUntil >= 0 && daysUntil <= 30) {
+        return { label: "Expiring", color: "bg-amber-50 text-amber-600" };
+      }
+    }
     return null;
   };
 
   return (
     <div className="h-[calc(100vh-3rem)] flex flex-col fade-in">
-      {/* Header */}
       <div className="flex items-center justify-between p-3 bg-white border-b border-gray-100">
         <div className="flex items-center gap-4">
           <h1 className="text-xl font-bold text-gray-900">Inventory</h1>
-          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">{inventory.length} items</span>
+          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">{total} items</span>
         </div>
         <div className="flex items-center gap-3">
           <div className="relative">
@@ -147,14 +177,13 @@ export default function ProfessionalInventory() {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="flex-1 overflow-auto bg-white">
+      <div className="flex-1 overflow-auto bg-white flex flex-col">
         {loading ? (
-          <div className="flex items-center justify-center h-full">
+          <div className="flex items-center justify-center flex-1">
             <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
           </div>
         ) : inventory.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-400">
+          <div className="flex flex-col items-center justify-center flex-1 text-gray-400">
             <Package size={48} className="mb-2 opacity-30" />
             <p className="text-sm font-medium">No items found</p>
           </div>
@@ -187,7 +216,7 @@ export default function ProfessionalInventory() {
                       <p className="text-[10px] text-gray-400">Cost: {Rs(item.purchase_price)}</p>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-sm text-gray-900">{item.quantity}</span>
                         {status && (
                           <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${status.color}`}>{status.label}</span>
@@ -199,10 +228,10 @@ export default function ProfessionalInventory() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => handleEdit(item)} className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg">
+                        <button type="button" onClick={() => handleEdit(item)} className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg">
                           <Edit2 size={14} />
                         </button>
-                        <button onClick={() => handleDelete(item.id, item.name)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg">
+                        <button type="button" onClick={() => handleDelete(item.id, item.name)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg">
                           <Trash2 size={14} />
                         </button>
                       </div>
@@ -213,15 +242,36 @@ export default function ProfessionalInventory() {
             </tbody>
           </table>
         )}
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center gap-2 py-3 border-t border-gray-100 bg-white shrink-0">
+            <button
+              type="button"
+              disabled={page <= 1 || loading}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="px-3 py-1.5 text-sm font-semibold border border-gray-200 rounded-lg disabled:opacity-40"
+            >
+              Previous
+            </button>
+            <span className="text-sm text-gray-600">Page {page} / {totalPages}</span>
+            <button
+              type="button"
+              disabled={page >= totalPages || loading}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              className="px-3 py-1.5 text-sm font-semibold border border-gray-200 rounded-lg disabled:opacity-40"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Add/Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl">
             <div className="flex items-center justify-between p-4 border-b">
               <h3 className="text-lg font-bold">{editId ? 'Edit Item' : 'Add New Item'}</h3>
-              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded">
+              <button type="button" onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded">
                 <X size={20} className="text-gray-500" />
               </button>
             </div>
@@ -272,7 +322,7 @@ export default function ProfessionalInventory() {
                 </div>
               </div>
 
-              {margin > 0 && (
+              {Number(margin) > 0 && (
                 <div className="text-xs font-bold text-emerald-600 bg-emerald-50 p-2 rounded-lg text-center">
                   Profit Margin: {margin}%
                 </div>

@@ -64,32 +64,40 @@ export const createSale = async (req, res) => {
 
 export const getSales = async (req, res) => {
   try {
-    const { page = 1, limit = 50, startDate, endDate } = req.query;
+    const { page = 1, limit = 50, startDate, endDate, search } = req.query;
     const offset = (Number(page) - 1) * Number(limit);
+    const lim = parseInt(limit, 10);
 
-    let query = 'SELECT s.*, u.name as cashier_name FROM sales s LEFT JOIN users u ON s.cashier_id = u.id';
-    let countQuery = 'SELECT COUNT(*) as total FROM sales';
-    const dateParams = [];
+    let query = 'SELECT s.*, u.name as cashier_name FROM sales s LEFT JOIN users u ON s.cashier_id = u.id WHERE 1=1';
+    let countQuery = 'SELECT COUNT(*) as total FROM sales WHERE 1=1';
+    const params = [];
 
     if (startDate && endDate) {
-      query += ' WHERE s.created_at >= ? AND s.created_at <= ?';
-      countQuery += ' WHERE created_at >= ? AND created_at <= ?';
-      dateParams.push(startDate, `${endDate}T23:59:59.999`);
+      query += ' AND s.created_at >= ? AND s.created_at <= ?';
+      countQuery += ' AND created_at >= ? AND created_at <= ?';
+      params.push(startDate, `${endDate}T23:59:59.999`);
+    }
+
+    if (search && String(search).trim()) {
+      const term = `%${String(search).trim()}%`;
+      query += ' AND (s.invoice_number LIKE ? OR IFNULL(s.customer_name, "") LIKE ?)';
+      countQuery += ' AND (invoice_number LIKE ? OR IFNULL(customer_name, "") LIKE ?)';
+      params.push(term, term);
     }
 
     query += ' ORDER BY s.created_at DESC LIMIT ? OFFSET ?';
 
-    const sales = dbAll(query, [...dateParams, parseInt(limit, 10), offset]).map(sale => ({
+    const sales = dbAll(query, [...params, lim, offset]).map(sale => ({
       ...sale,
       items: sale.items ? JSON.parse(sale.items) : []
     }));
 
-    const { total } = dbGet(countQuery, dateParams);
+    const { total } = dbGet(countQuery, params);
 
     res.json({
       sales,
-      totalPages: Math.ceil(total / parseInt(limit, 10)) || 1,
-      currentPage: parseInt(page),
+      totalPages: Math.ceil(total / lim) || 1,
+      currentPage: parseInt(page, 10),
       total
     });
   } catch (error) {

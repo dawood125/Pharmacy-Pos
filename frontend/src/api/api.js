@@ -95,10 +95,14 @@ export const api = {
     return handleResponse(res);
   },
 
-  getSales: async (page = 1, startDate, endDate, limit = 50) => {
-    let url = `${API_BASE}/sales?page=${page}&limit=${limit}`;
-    if (startDate && endDate) url += `&startDate=${startDate}&endDate=${endDate}`;
-    const res = await fetch(url, { headers: headers() });
+  getSales: async (page = 1, startDate, endDate, limit = 50, search = '') => {
+    const q = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (startDate && endDate) {
+      q.set('startDate', startDate);
+      q.set('endDate', endDate);
+    }
+    if (search) q.set('search', search);
+    const res = await fetch(`${API_BASE}/sales?${q}`, { headers: headers() });
     return handleResponse(res);
   },
 

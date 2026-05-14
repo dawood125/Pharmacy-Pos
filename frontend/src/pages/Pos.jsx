@@ -4,15 +4,18 @@ import { api } from "../api/api";
 import { useToast } from "../common/Toast";
 import { useCart } from "../common/CartContext";
 
-const Rs = (n) => `Rs ${Number(n || 0).toLocaleString()}`;
+const Rs = (n) => {
+  const x = Number(n);
+  return `Rs ${(Number.isFinite(x) ? x : 0).toLocaleString()}`;
+};
 const generateInvoice = () => `INV-${Date.now().toString().slice(-6)}`;
 const SUGGEST_LIMIT = 15;
-const GRID_PAGE_SIZE = 100;
+const GRID_PAGE_SIZE = 24;
 
 export default function ProfessionalPOS() {
   const { addToast } = useToast();
   const {
-    cart, addToCart, updateQty, removeItem, clearCart,
+    cart, addToCart, updateQty, setLineQty, removeItem, clearCart,
     paymentMethod, setPaymentMethod, cash, setCash
   } = useCart();
 
@@ -21,17 +24,22 @@ export default function ProfessionalPOS() {
   const [suggestions, setSuggestions] = useState([]);
   const [suggestLoading, setSuggestLoading] = useState(false);
   const [highlightIndex, setHighlightIndex] = useState(-1);
+  const [productPage, setProductPage] = useState(1);
+  const [productTotalPages, setProductTotalPages] = useState(1);
   const [invoiceNo, setInvoiceNo] = useState(generateInvoice());
   const [loading, setLoading] = useState(true);
   const [printing, setPrinting] = useState(false);
   const searchWrapRef = useRef(null);
+  const prevSearchRef = useRef("");
 
-  const fetchProducts = useCallback(async () => {
+  const loadProductGrid = useCallback(async (page) => {
     try {
       setLoading(true);
-      const data = await api.getProducts("", 1, GRID_PAGE_SIZE);
+      const data = await api.getProducts("", page, GRID_PAGE_SIZE);
       const sorted = (data.products || []).sort((a, b) => a.name.localeCompare(b.name));
       setProducts(sorted);
+      setProductTotalPages(Math.max(1, data.totalPages || 1));
+      setProductPage(data.currentPage || page);
     } catch (err) {
       addToast('Failed to load products', 'error');
     } finally {
@@ -40,37 +48,37 @@ export default function ProfessionalPOS() {
   }, [addToast]);
 
   useEffect(() => {
-    fetchProducts();
-  }, [fetchProducts]);
+    if (prevSearchRef.current.trim() && !search.trim()) {
+      setProductPage(1);
+    }
+    prevSearchRef.current = search;
+  }, [search]);
 
   useEffect(() => {
     const q = search.trim();
-    if (!q) {
-      setSuggestions([]);
-      setHighlightIndex(-1);
-      setSuggestLoading(false);
-      fetchProducts();
-      return;
+    if (q) {
+      setSuggestLoading(true);
+      const timer = setTimeout(async () => {
+        try {
+          const data = await api.getProducts(q, 1, SUGGEST_LIMIT);
+          const sorted = (data.products || []).sort((a, b) => a.name.localeCompare(b.name));
+          setSuggestions(sorted);
+          setHighlightIndex(sorted.length ? 0 : -1);
+          setProducts(sorted);
+        } catch {
+          addToast('Search failed', 'error');
+          setSuggestions([]);
+        } finally {
+          setSuggestLoading(false);
+        }
+      }, 100);
+      return () => clearTimeout(timer);
     }
-
-    setSuggestLoading(true);
-    const timer = setTimeout(async () => {
-      try {
-        const data = await api.getProducts(q, 1, SUGGEST_LIMIT);
-        const sorted = (data.products || []).sort((a, b) => a.name.localeCompare(b.name));
-        setSuggestions(sorted);
-        setHighlightIndex(sorted.length ? 0 : -1);
-        setProducts(sorted);
-      } catch {
-        addToast('Search failed', 'error');
-        setSuggestions([]);
-      } finally {
-        setSuggestLoading(false);
-      }
-    }, 100);
-
-    return () => clearTimeout(timer);
-  }, [search, fetchProducts, addToast]);
+    setSuggestions([]);
+    setHighlightIndex(-1);
+    setSuggestLoading(false);
+    loadProductGrid(productPage);
+  }, [search, productPage, loadProductGrid, addToast]);
 
   useEffect(() => {
     const onDocClick = (e) => {
@@ -88,8 +96,9 @@ export default function ProfessionalPOS() {
     setSearch("");
     setSuggestions([]);
     setHighlightIndex(-1);
-    fetchProducts();
-  }, [addToCart, addToast, fetchProducts]);
+    setProductPage(1);
+    loadProductGrid(1);
+  }, [addToCart, addToast, loadProductGrid]);
 
   useEffect(() => {
     const handleKey = (e) => {
@@ -152,7 +161,7 @@ export default function ProfessionalPOS() {
 
       await api.createSale(saleData);
 
-      fetchProducts();
+      loadProductGrid(productPage);
 
       window.print();
 
@@ -224,6 +233,7 @@ export default function ProfessionalPOS() {
               <p className="text-sm">No products found</p>
             </div>
           ) : (
+            <>
             <div className="grid grid-cols-2 xl:grid-cols-3 gap-2">
               {products.map((p) => (
                 <button
@@ -249,6 +259,28 @@ export default function ProfessionalPOS() {
                 </button>
               ))}
             </div>
+            {!search.trim() && productTotalPages > 1 && (
+              <div className="flex items-center justify-center gap-2 py-2 border-t border-gray-100 shrink-0">
+                <button
+                  type="button"
+                  disabled={productPage <= 1 || loading}
+                  onClick={() => setProductPage((p) => Math.max(1, p - 1))}
+                  className="px-3 py-1 text-xs font-semibold border border-gray-200 rounded-lg disabled:opacity-40"
+                >
+                  Prev
+                </button>
+                <span className="text-xs text-gray-500">{productPage} / {productTotalPages}</span>
+                <button
+                  type="button"
+                  disabled={productPage >= productTotalPages || loading}
+                  onClick={() => setProductPage((p) => Math.min(productTotalPages, p + 1))}
+                  className="px-3 py-1 text-xs font-semibold border border-gray-200 rounded-lg disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+            </>
           )}
         </div>
       </div>
@@ -299,10 +331,17 @@ export default function ProfessionalPOS() {
                       <p className="text-[10px] font-medium text-gray-400">{Rs(i.price)}</p>
                     </td>
                     <td className="px-2 py-2">
-                      <div className="flex items-center justify-center gap-0.5 bg-white border border-gray-200 rounded-lg p-0.5">
-                        <button onClick={() => updateQty(i.id, -1, i.stock)} className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-primary-600 rounded"><Minus size={10} /></button>
-                        <span className="w-5 text-center text-xs font-bold">{i.qty}</span>
-                        <button onClick={() => updateQty(i.id, 1, i.stock)} className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-primary-600 rounded"><Plus size={10} /></button>
+                      <div className="flex items-center justify-center gap-1">
+                        <button type="button" onClick={() => updateQty(i.id, -1, i.stock)} className="w-6 h-7 flex items-center justify-center text-gray-400 hover:text-primary-600 rounded border border-gray-200 bg-white shrink-0"><Minus size={10} /></button>
+                        <input
+                          type="number"
+                          min={1}
+                          max={i.stock}
+                          value={i.qty}
+                          onChange={(e) => setLineQty(i.id, e.target.value, i.stock)}
+                          className="w-14 min-w-[3.5rem] px-1 py-1 text-center text-xs font-bold border border-gray-200 rounded-lg bg-white"
+                        />
+                        <button type="button" onClick={() => updateQty(i.id, 1, i.stock)} className="w-6 h-7 flex items-center justify-center text-gray-400 hover:text-primary-600 rounded border border-gray-200 bg-white shrink-0"><Plus size={10} /></button>
                       </div>
                     </td>
                     <td className="px-3 py-2 text-right font-bold text-xs text-gray-900">

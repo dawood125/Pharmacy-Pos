@@ -68,12 +68,22 @@ export const CartProvider = ({ children }) => {
     }));
   };
 
+  /** Set absolute quantity (clamped 1..stock). */
+  const setLineQty = (id, rawQty, stock) => {
+    const max = Math.max(0, Number(stock) || 0);
+    const n = Math.floor(Number(rawQty));
+    if (!Number.isFinite(n) || n < 1) return;
+    const clamped = Math.min(n, max);
+    if (clamped < 1) return;
+    setCart(prev => prev.map(i => (i.id === id ? { ...i, qty: clamped } : i)));
+  };
+
   const removeItem = (id) => setCart(prev => prev.filter(i => i.id !== id));
 
   return (
     <CartContext.Provider value={{
       cart, setCart,
-      addToCart, updateQty, removeItem, clearCart,
+      addToCart, updateQty, setLineQty, removeItem, clearCart,
       paymentMethod, setPaymentMethod,
       cash, setCash
     }}>

@@ -43,7 +43,7 @@ export default function Dashboard() {
 
   const revenue = stats?.todayRevenue || 0;
   const profit = stats?.todayProfit || 0;
-  const marginPct = Number(stats?.todayMarginPct || 0);
+  const marginPct = Number.isFinite(Number(stats?.todayMarginPct)) ? Number(stats.todayMarginPct) : 0;
   const revenueBarPct = revenue > 0 ? 100 : 0;
   const profitBarPct = revenue > 0 ? Math.max(0, Math.min(100, (profit / revenue) * 100)) : 0;
 
@@ -77,7 +77,7 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
         <div
-          onClick={() => navigate('/pos')}
+          onClick={() => navigate('/reports')}
           className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md transition-all"
         >
           <div className="flex items-center justify-between mb-3">

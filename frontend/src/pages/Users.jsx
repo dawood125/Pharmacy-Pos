@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Edit2, Trash2, Shield, UserCheck, Search, X, CheckSquare, Square } from 'lucide-react';
 import { api } from '../api/api';
 import { useToast } from '../common/Toast';
@@ -23,11 +23,14 @@ const modules = [
   { id: 'settings', name: 'Settings', actions: ['view', 'update'] }
 ];
 
+const USER_PAGE_SIZE = 8;
+
 export default function Users() {
   const { addToast } = useToast();
   const [users, setUsers] = useState([]);
   const [stats, setStats] = useState({ total: 0, active: 0, admins: 0 });
   const [search, setSearch] = useState('');
+  const [userPage, setUserPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({ name: '', email: '', password: '', role: 'cashier', permissions: JSON.parse(JSON.stringify(defaultPermissions)) });
@@ -149,6 +152,21 @@ export default function Users() {
     u.email.toLowerCase().includes(search.toLowerCase())
   );
 
+  useEffect(() => {
+    setUserPage(1);
+  }, [search]);
+
+  const userTotalPages = Math.max(1, Math.ceil(filteredUsers.length / USER_PAGE_SIZE));
+
+  const pagedUsers = useMemo(() => {
+    const start = (userPage - 1) * USER_PAGE_SIZE;
+    return filteredUsers.slice(start, start + USER_PAGE_SIZE);
+  }, [filteredUsers, userPage]);
+
+  useEffect(() => {
+    if (userPage > userTotalPages) setUserPage(userTotalPages);
+  }, [userPage, userTotalPages]);
+
   return (
     <div className="max-w-7xl mx-auto space-y-6 fade-in">
 
@@ -237,7 +255,7 @@ export default function Users() {
                 </td>
               </tr>
             ) : (
-              filteredUsers.map((user) => (
+              pagedUsers.map((user) => (
                 <tr key={user.id} className="hover:bg-gray-50 group">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
@@ -278,6 +296,27 @@ export default function Users() {
             )}
           </tbody>
         </table>
+        {userTotalPages > 1 && (
+          <div className="flex items-center justify-center gap-2 py-3 border-t border-gray-100">
+            <button
+              type="button"
+              disabled={userPage <= 1}
+              onClick={() => setUserPage((p) => Math.max(1, p - 1))}
+              className="px-3 py-1.5 text-sm font-semibold border border-gray-200 rounded-lg disabled:opacity-40"
+            >
+              Previous
+            </button>
+            <span className="text-sm text-gray-600">Page {userPage} / {userTotalPages}</span>
+            <button
+              type="button"
+              disabled={userPage >= userTotalPages}
+              onClick={() => setUserPage((p) => Math.min(userTotalPages, p + 1))}
+              className="px-3 py-1.5 text-sm font-semibold border border-gray-200 rounded-lg disabled:opacity-40"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Modal */}

@@ -1,15 +1,21 @@
 import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
-import { initializeDatabase, dbRun, dbGet } from './config/db.js';
+import { initializeDatabase, dbRun } from './config/db.js';
 
 dotenv.config();
+
+function ymd(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 
 const seedDatabase = async () => {
   try {
     await initializeDatabase();
     console.log('Connected to SQLite database');
 
-    // Clear existing data
     dbRun('DELETE FROM returns');
     dbRun('DELETE FROM sales');
     dbRun('DELETE FROM products');
@@ -17,26 +23,29 @@ const seedDatabase = async () => {
     dbRun('DELETE FROM settings');
     console.log('Cleared existing data');
 
-    // Create Admin User
     const adminPassword = await bcrypt.hash('admin123', 10);
     dbRun('INSERT INTO users (name, email, password, role, status) VALUES (?, ?, ?, ?, ?)', ['Admin User', 'admin@pharmacy.com', adminPassword, 'admin', 'active']);
     console.log('Created admin user: admin@pharmacy.com / admin123');
 
-    // Create Sample Cashier
     const cashierPassword = await bcrypt.hash('cashier123', 10);
     dbRun('INSERT INTO users (name, email, password, role, status) VALUES (?, ?, ?, ?, ?)', ['Cashier User', 'cashier@pharmacy.com', cashierPassword, 'cashier', 'active']);
     console.log('Created cashier user: cashier@pharmacy.com / cashier123');
 
-    // Create Sample Products
+    const today = new Date();
+    const expired = new Date(today);
+    expired.setDate(expired.getDate() - 14);
+    const expiringSoon = new Date(today);
+    expiringSoon.setDate(expiringSoon.getDate() + 20);
+    const future = new Date(today);
+    future.setDate(future.getDate() + 120);
+
     const products = [
-      { name: 'Paracetamol 500mg', barcode: '1001', batchNumber: 'BATCH-001', category: 'Painkiller', purchasePrice: 40, salePrice: 50, quantity: 120, expiryDate: '2026-12-31' },
-      { name: 'Amoxicillin 250mg', barcode: '1002', batchNumber: 'BATCH-002', category: 'Antibiotic', purchasePrice: 100, salePrice: 120, quantity: 50, expiryDate: '2025-06-30' },
-      { name: 'Cough Syrup (Sugar Free)', barcode: '1003', batchNumber: 'BATCH-003', category: 'Syrup', purchasePrice: 150, salePrice: 180, quantity: 45, expiryDate: '2026-08-15' },
-      { name: 'Vitamin C Chewable', barcode: '1004', batchNumber: 'BATCH-004', category: 'Vitamins', purchasePrice: 70, salePrice: 90, quantity: 200, expiryDate: '2027-03-20' },
-      { name: 'Ibuprofen 400mg', barcode: '1005', batchNumber: 'BATCH-005', category: 'Painkiller', purchasePrice: 55, salePrice: 65, quantity: 80, expiryDate: '2026-11-10' },
-      { name: 'Omeprazole 20mg', barcode: '1006', batchNumber: 'BATCH-006', category: 'Antacid', purchasePrice: 120, salePrice: 150, quantity: 30, expiryDate: '2025-09-30' },
-      { name: 'Panadol Extra', barcode: '1007', batchNumber: 'BATCH-007', category: 'Painkiller', purchasePrice: 25, salePrice: 35, quantity: 150, expiryDate: '2027-01-15' },
-      { name: 'Brufen 200mg', barcode: '1008', batchNumber: 'BATCH-008', category: 'Painkiller', purchasePrice: 45, salePrice: 55, quantity: 90, expiryDate: '2026-10-20' }
+      { name: 'Paracetamol 500mg', barcode: '1001', batchNumber: 'BATCH-001', category: 'Painkiller', purchasePrice: 40, salePrice: 50, quantity: 120, expiryDate: ymd(future) },
+      { name: 'Amoxicillin 250mg', barcode: '1002', batchNumber: 'BATCH-002', category: 'Antibiotic', purchasePrice: 100, salePrice: 120, quantity: 50, expiryDate: ymd(expiringSoon) },
+      { name: 'Cough Syrup (Sugar Free)', barcode: '1003', batchNumber: 'BATCH-003', category: 'Syrup', purchasePrice: 150, salePrice: 180, quantity: 45, expiryDate: ymd(future) },
+      { name: 'Vitamin C Chewable', barcode: '1004', batchNumber: 'BATCH-004', category: 'Vitamins', purchasePrice: 70, salePrice: 90, quantity: 200, expiryDate: ymd(future) },
+      { name: 'Ibuprofen 400mg', barcode: '1005', batchNumber: 'BATCH-005', category: 'Painkiller', purchasePrice: 55, salePrice: 65, quantity: 8, expiryDate: ymd(future) },
+      { name: 'Expired Sample Batch', barcode: '1006', batchNumber: 'EXP-BATCH', category: 'Demo', purchasePrice: 10, salePrice: 15, quantity: 5, expiryDate: ymd(expired) }
     ];
 
     products.forEach(p => {
@@ -45,9 +54,8 @@ const seedDatabase = async () => {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `, [p.name, p.barcode, p.batchNumber, p.category, p.purchasePrice, p.salePrice, p.quantity, p.expiryDate]);
     });
-    console.log('Created sample products');
+    console.log('Created sample products (fresh dates relative to today)');
 
-    // Create Default Settings
     const settings = [
       { key: 'storeName', value: 'MedFlow Pharmacy' },
       { key: 'storeAddress', value: '123 Health Avenue, Medical City' },
