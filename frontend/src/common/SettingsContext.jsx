@@ -3,25 +3,34 @@ import { api } from '../api/api';
 
 const SettingsContext = createContext();
 
+const defaultSettings = {
+  storeName: 'MedFlow Pharmacy',
+  storeAddress: '',
+  storePhone: '',
+  currency: 'PKR',
+  timezone: 'Asia/Karachi',
+  taxRate: 17,
+  taxNumber: '',
+  gstNumber: '',
+  taxInclusive: 'exclusive',
+  lowStockAlerts: true,
+  requireLogin: true,
+  allowNegative: false,
+  receiptFooter: 'Thank you for your business!'
+};
+
 export function SettingsProvider({ children }) {
-  const [settings, setSettings] = useState({
-    storeName: 'MedFlow',
-    phone: '',
-    address: '',
-    currency: 'PKR',
-    taxRate: 0,
-    receiptFooter: 'Thank you for your business!'
-  });
+  const [settings, setSettings] = useState(defaultSettings);
   const [loading, setLoading] = useState(true);
 
   const fetchSettings = async () => {
     try {
       const data = await api.getSettings();
-      if (data && Object.keys(data).length > 0) {
-        setSettings(prev => ({ ...prev, ...data }));
+      if (data && typeof data === 'object') {
+        setSettings((prev) => ({ ...prev, ...data }));
       }
     } catch (err) {
-      console.error("Failed to fetch settings", err);
+      console.error('Failed to fetch settings', err);
     } finally {
       setLoading(false);
     }
@@ -37,13 +46,9 @@ export function SettingsProvider({ children }) {
   }, []);
 
   const updateSettings = async (newSettings) => {
-    try {
-      await api.updateSettings(newSettings);
-      setSettings(prev => ({ ...prev, ...newSettings }));
-      return true;
-    } catch (err) {
-      throw err;
-    }
+    await api.updateSettings(newSettings);
+    setSettings((prev) => ({ ...prev, ...newSettings }));
+    return true;
   };
 
   return (

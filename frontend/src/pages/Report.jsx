@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from "react";
-import { Download, Printer, TrendingUp, DollarSign, Activity } from "lucide-react";
+import { Download, Printer, TrendingUp, DollarSign, Activity, Package } from "lucide-react";
 import { api } from "../api/api";
 import { useToast } from "../common/Toast";
 
@@ -28,12 +28,14 @@ export default function PharmacyReports() {
   const [activeTab, setActiveTab] = useState("daily");
   const [page, setPage] = useState(1);
   const [data, setData] = useState({ daily: [], profit: [], best: [] });
+  const [expiredReport, setExpiredReport] = useState({ products: [], totalPages: 1, total: 0 });
+  const [expiredPage, setExpiredPage] = useState(1);
   const [meta, setMeta] = useState({ dailySummary: null, monthlySummary: null });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchReportData();
-  }, [activeTab]);
+  }, [activeTab, expiredPage]);
 
   const fetchReportData = async () => {
     setLoading(true);
@@ -51,6 +53,13 @@ export default function PharmacyReports() {
       } else if (activeTab === 'best') {
         const result = await api.getBestSelling(20);
         setData(prev => ({ ...prev, best: result || [] }));
+      } else if (activeTab === 'expired') {
+        const result = await api.getExpiredProducts(expiredPage, ITEMS_PER_PAGE);
+        setExpiredReport({
+          products: result.products || [],
+          totalPages: Math.max(1, result.totalPages || 1),
+          total: result.total ?? 0
+        });
       }
     } catch (err) {
       addToast('Failed to load reports', 'error');
@@ -60,7 +69,21 @@ export default function PharmacyReports() {
   };
 
   const handleExport = () => {
-    const currentData = data[activeTab] || [];
+    let currentData = [];
+    if (activeTab === 'expired') {
+      currentData = (expiredReport.products || []).map((p) => ({
+        name: p.name,
+        barcode: p.barcode || '',
+        batch_number: p.batch_number || '',
+        category: p.category || '',
+        quantity: p.quantity,
+        expiry_date: p.expiry_date,
+        sale_price: p.sale_price,
+        purchase_price: p.purchase_price
+      }));
+    } else {
+      currentData = data[activeTab] || [];
+    }
     if (currentData.length > 0) {
       downloadCSV(currentData, `${activeTab}-report`);
       addToast('Report exported successfully', 'success');
@@ -68,12 +91,14 @@ export default function PharmacyReports() {
   };
 
   const currentData = data[activeTab] || [];
-  const totalPages = Math.ceil(currentData.length / ITEMS_PER_PAGE);
+  const clientTotalPages = Math.ceil(currentData.length / ITEMS_PER_PAGE) || 1;
+  const totalPages = activeTab === 'expired' ? (expiredReport.totalPages || 1) : clientTotalPages;
 
   const paginatedData = useMemo(() => {
+    if (activeTab === 'expired') return expiredReport.products || [];
     const start = (page - 1) * ITEMS_PER_PAGE;
     return currentData.slice(start, start + ITEMS_PER_PAGE);
-  }, [page, activeTab, currentData]);
+  }, [page, activeTab, currentData, expiredReport.products]);
 
   const dailySummary = meta.dailySummary;
   const monthlySummary = meta.monthlySummary;
@@ -84,7 +109,8 @@ export default function PharmacyReports() {
   const tabs = [
     { key: "daily", label: "Daily Sales", icon: TrendingUp },
     { key: "profit", label: "Monthly Profit", icon: DollarSign },
-    { key: "best", label: "Best Selling", icon: Activity }
+    { key: "best", label: "Best Selling", icon: Activity },
+    { key: "expired", label: "Expired Medicines", icon: Package }
   ];
 
   return (
@@ -94,7 +120,7 @@ export default function PharmacyReports() {
       <div className="flex items-center justify-between bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Reports & Analytics</h1>
-          <p className="text-sm text-gray-500">Sales, profit and inventory reports</p>
+          <p className="text-sm text-gray-500">Sales, profit, inventory and expired stock</p>
         </div>
         <div className="flex gap-2">
           <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 border border-gray-200 bg-white rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50">
@@ -141,12 +167,21 @@ export default function PharmacyReports() {
         </div>
       )}
 
+      {activeTab === "expired" && !loading && (
+        <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4">
+          <p className="text-sm text-rose-900">
+            <span className="font-black">{expiredReport.total}</span> expired batch
+            {expiredReport.total === 1 ? '' : 'es'}. These batches are not shown in inventory or POS.
+          </p>
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="flex gap-2 overflow-x-auto">
         {tabs.map((tab) => (
           <button
             key={tab.key}
-            onClick={() => { setActiveTab(tab.key); setPage(1); }}
+            onClick={() => { setActiveTab(tab.key); setPage(1); setExpiredPage(1); }}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap ${
               activeTab === tab.key ? "bg-gray-900 text-white" : "bg-white text-gray-500 border border-gray-100 hover:bg-gray-50"
             }`}
@@ -257,6 +292,47 @@ export default function PharmacyReports() {
               </table>
               )
             )}
+
+            {activeTab === "expired" && (
+              paginatedData.length === 0 ? (
+                <div className="py-16 text-center text-gray-400">
+                  <Package size={40} className="mx-auto mb-2 opacity-30" />
+                  <p className="text-sm font-medium">No expired medicines on record</p>
+                </div>
+              ) : (
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th className="px-4 py-3 text-xs font-bold uppercase text-gray-500 text-left">Medicine</th>
+                    <th className="px-4 py-3 text-xs font-bold uppercase text-gray-500 text-left">Category</th>
+                    <th className="px-4 py-3 text-xs font-bold uppercase text-gray-500 text-left">Batch</th>
+                    <th className="px-4 py-3 text-xs font-bold uppercase text-gray-500 text-center">Qty</th>
+                    <th className="px-4 py-3 text-xs font-bold uppercase text-gray-500 text-left">Expiry</th>
+                    <th className="px-4 py-3 text-xs font-bold uppercase text-gray-500 text-right">Sale</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {paginatedData.map((item) => (
+                    <tr key={item.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <p className="font-bold text-sm">{item.name}</p>
+                        <p className="text-[10px] text-gray-400 font-mono">{item.barcode || '—'}</p>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{item.category || '—'}</td>
+                      <td className="px-4 py-3 text-xs font-mono text-gray-600">{item.batch_number || '—'}</td>
+                      <td className="px-4 py-3 text-center font-bold">{item.quantity}</td>
+                      <td className="px-4 py-3 text-sm">
+                        <span className="bg-rose-100 text-rose-800 px-2 py-0.5 rounded text-xs font-bold">
+                          {item.expiry_date ? String(item.expiry_date).split('T')[0] : '—'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right font-black">{Rs(item.sale_price)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              )
+            )}
           </>
         )}
       </div>
@@ -265,18 +341,28 @@ export default function PharmacyReports() {
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-2">
           <button
-            onClick={() => setPage(p => Math.max(1, p - 1))}
-            disabled={page === 1}
+            type="button"
+            onClick={() =>
+              activeTab === 'expired'
+                ? setExpiredPage((p) => Math.max(1, p - 1))
+                : setPage((p) => Math.max(1, p - 1))
+            }
+            disabled={activeTab === 'expired' ? expiredPage === 1 : page === 1}
             className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
           >
             Previous
           </button>
           <span className="px-3 py-1.5 text-sm font-bold">
-            Page {page} of {totalPages}
+            Page {activeTab === 'expired' ? expiredPage : page} of {totalPages}
           </span>
           <button
-            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-            disabled={page === totalPages}
+            type="button"
+            onClick={() =>
+              activeTab === 'expired'
+                ? setExpiredPage((p) => Math.min(totalPages, p + 1))
+                : setPage((p) => Math.min(totalPages, p + 1))
+            }
+            disabled={activeTab === 'expired' ? expiredPage === totalPages : page === totalPages}
             className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
           >
             Next

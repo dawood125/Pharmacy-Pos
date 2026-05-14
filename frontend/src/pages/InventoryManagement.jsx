@@ -10,9 +10,30 @@ const Rs = (n) => {
 
 const PAGE_SIZE = 15;
 
+/** Local calendar date YYYY-MM-DD (avoids UTC vs local mismatch for expiry checks). */
 function todayYmd() {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+
+const MEDICINE_CATEGORIES = [
+  'Painkiller',
+  'Antibiotic',
+  'Syrup',
+  'Vitamins',
+  'Antacid',
+  'Cardiac',
+  'Diabetes care',
+  'Dermatology',
+  'Gastrointestinal',
+  'Respiratory',
+  'Herbal / Unani',
+  'OTC / General',
+  'Injection',
+  'Other'
+];
+
+const OTHER_CATEGORY = 'Other';
 
 function expiryYmd(item) {
   if (!item.expiry_date) return null;
@@ -22,7 +43,7 @@ function expiryYmd(item) {
 export default function ProfessionalInventory() {
   const { addToast } = useToast();
   const [form, setForm] = useState({
-    name: "", batchNumber: "", barcode: "", category: "",
+    name: "", batchNumber: "", barcode: "", category: "", categoryOther: "",
     expiry: "", purchasePrice: "", salePrice: "", quantity: "", lowStockThreshold: 10
   });
   const [inventory, setInventory] = useState([]);
@@ -68,14 +89,32 @@ export default function ProfessionalInventory() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!form.category) {
+      addToast('Please select a category', 'warning');
+      return;
+    }
+    let category = form.category;
+    if (category === OTHER_CATEGORY) {
+      category = (form.categoryOther || '').trim();
+      if (!category) {
+        addToast('Please type the category name when you choose Other', 'warning');
+        return;
+      }
+    }
+    const purchasePrice = Number(form.purchasePrice);
+    const salePrice = Number(form.salePrice);
+    if (!Number.isFinite(purchasePrice) || !Number.isFinite(salePrice) || salePrice <= purchasePrice) {
+      addToast('Selling price must be higher than cost price', 'warning');
+      return;
+    }
     try {
       const productData = {
         name: form.name,
         barcode: form.barcode || undefined,
         batchNumber: form.batchNumber || undefined,
-        category: form.category || undefined,
-        purchasePrice: Number(form.purchasePrice),
-        salePrice: Number(form.salePrice),
+        category,
+        purchasePrice,
+        salePrice,
         quantity: Number(form.quantity),
         expiryDate: form.expiry || undefined,
         lowStockThreshold: Number(form.lowStockThreshold) || 10
@@ -89,7 +128,7 @@ export default function ProfessionalInventory() {
         addToast('Product added successfully', 'success');
       }
 
-      setForm({ name: "", batchNumber: "", barcode: "", category: "", expiry: "", purchasePrice: "", salePrice: "", quantity: "", lowStockThreshold: 10 });
+      setForm({ name: "", batchNumber: "", barcode: "", category: "", categoryOther: "", expiry: "", purchasePrice: "", salePrice: "", quantity: "", lowStockThreshold: 10 });
       setEditId(null);
       setShowModal(false);
       fetchInventory();
@@ -111,11 +150,15 @@ export default function ProfessionalInventory() {
   };
 
   const handleEdit = (item) => {
+    const rawCat = item.category || '';
+    const usePreset = rawCat && MEDICINE_CATEGORIES.includes(rawCat) && rawCat !== OTHER_CATEGORY;
+    const presetCat = usePreset ? rawCat : (rawCat ? OTHER_CATEGORY : '');
     setForm({
       name: item.name,
       batchNumber: item.batch_number || "",
       barcode: item.barcode || "",
-      category: item.category || "",
+      category: presetCat,
+      categoryOther: usePreset ? '' : rawCat,
       expiry: item.expiry_date ? item.expiry_date.split('T')[0] : "",
       purchasePrice: item.purchase_price,
       salePrice: item.sale_price,
@@ -133,11 +176,11 @@ export default function ProfessionalInventory() {
     if (item.quantity <= 0) {
       return { label: "Out", color: "bg-red-50 text-red-600" };
     }
-    if (item.quantity < (item.low_stock_threshold || 10)) {
-      return { label: "Low", color: "bg-orange-50 text-orange-600" };
-    }
     if (exp && exp < today) {
       return { label: "Expired batch", color: "bg-red-100 text-red-800" };
+    }
+    if (item.quantity < (item.low_stock_threshold || 10)) {
+      return { label: "Low", color: "bg-orange-50 text-orange-600" };
     }
     if (exp) {
       const expMid = new Date(`${exp}T12:00:00`);
@@ -169,7 +212,7 @@ export default function ProfessionalInventory() {
             />
           </div>
           <button
-            onClick={() => { setEditId(null); setForm({ name: "", batchNumber: "", barcode: "", category: "", expiry: "", purchasePrice: "", salePrice: "", quantity: "", lowStockThreshold: 10 }); setShowModal(true); }}
+            onClick={() => { setEditId(null); setForm({ name: "", batchNumber: "", barcode: "", category: "", categoryOther: "", expiry: "", purchasePrice: "", salePrice: "", quantity: "", lowStockThreshold: 10 }); setShowModal(true); }}
             className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-semibold hover:bg-primary-700"
           >
             <PlusCircle size={16} /> Add Item
@@ -281,6 +324,31 @@ export default function ProfessionalInventory() {
                 <label className="text-xs font-bold text-gray-500 uppercase">Name *</label>
                 <input name="name" value={form.name} onChange={handleChange} required
                   className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-sm font-medium" placeholder="Medicine Name" />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase">Category *</label>
+                <select
+                  name="category"
+                  value={form.category}
+                  onChange={handleChange}
+                  required
+                  className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-sm font-medium"
+                >
+                  <option value="">Select category…</option>
+                  {MEDICINE_CATEGORIES.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+                {form.category === OTHER_CATEGORY && (
+                  <input
+                    name="categoryOther"
+                    value={form.categoryOther}
+                    onChange={handleChange}
+                    placeholder="Type category name"
+                    className="w-full mt-2 bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-sm"
+                  />
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">

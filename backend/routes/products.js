@@ -6,7 +6,8 @@ import {
   updateProduct,
   deleteProduct,
   getLowStock,
-  getExpiringSoon
+  getExpiringSoon,
+  getExpiredProducts
 } from '../controllers/productController.js';
 
 const router = express.Router();
@@ -14,6 +15,7 @@ const router = express.Router();
 router.get('/', getProducts);
 router.get('/low-stock', getLowStock);
 router.get('/expiring', getExpiringSoon);
+router.get('/expired', getExpiredProducts);
 router.get('/:id', getProduct);
 router.post('/', createProduct);
 router.put('/:id', updateProduct);

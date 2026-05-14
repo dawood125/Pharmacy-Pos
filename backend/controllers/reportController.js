@@ -1,4 +1,5 @@
 import { dbAll } from '../config/db.js';
+import { todayYmdLocal } from '../utils/dateHelpers.js';
 import {
   parseSaleItems,
   missingPurchaseProductIds,
@@ -200,7 +201,7 @@ export const getBestSelling = async (req, res) => {
 
 export const getDashboardStats = async (req, res) => {
   try {
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayYmdLocal();
 
     const todaySales = dbAll(
       `
@@ -218,24 +219,26 @@ export const getDashboardStats = async (req, res) => {
     const lowStock = dbAll(`
       SELECT * FROM products
       WHERE status = 'active' AND quantity <= low_stock_threshold
-    `);
+      AND (expiry_date IS NULL OR substr(expiry_date, 1, 10) >= ?)
+    `, [today]);
 
     const thirtyDays = new Date();
     thirtyDays.setDate(thirtyDays.getDate() + 30);
+    const expiringEnd = `${thirtyDays.getFullYear()}-${String(thirtyDays.getMonth() + 1).padStart(2, '0')}-${String(thirtyDays.getDate()).padStart(2, '0')}`;
     const expiring = dbAll(
       `
       SELECT * FROM products
       WHERE status = 'active' AND expiry_date IS NOT NULL
-      AND expiry_date <= ? AND expiry_date >= ?
+      AND substr(expiry_date, 1, 10) <= ? AND substr(expiry_date, 1, 10) >= ?
     `,
-      [thirtyDays.toISOString().split('T')[0], today]
+      [expiringEnd, today]
     );
 
     const expired = dbAll(
       `
       SELECT * FROM products
       WHERE status = 'active' AND expiry_date IS NOT NULL
-      AND expiry_date < ? AND quantity > 0
+      AND substr(expiry_date, 1, 10) < ?
       ORDER BY expiry_date ASC
     `,
       [today]

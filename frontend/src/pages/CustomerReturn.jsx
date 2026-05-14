@@ -351,8 +351,14 @@ export default function CustomerReturnSystem() {
 
       <div className="hidden print:block w-[80mm] mx-auto p-3 text-black font-sans text-[11px] leading-tight">
         <div className="text-center mb-3 border-b-2 border-black pb-2">
-          <h1 className="text-lg font-black uppercase mb-1">{settings?.storeName || 'MedFlow Pharmacy'}</h1>
-          <p className="text-[9px]">RETURN RECEIPT</p>
+          <h1 className="text-lg font-black uppercase mb-1">{settings?.storeName || 'Pharmacy'}</h1>
+          {settings?.storeAddress ? (
+            <p className="text-[9px] whitespace-pre-line">{settings.storeAddress}</p>
+          ) : null}
+          {settings?.storePhone ? (
+            <p className="text-[9px]">Tel: {settings.storePhone}</p>
+          ) : null}
+          <p className="text-[9px] font-bold mt-1">RETURN RECEIPT</p>
           <div className="mt-1 text-left text-[9px]">
             <p>Original Inv: {invoice.invoice_number}</p>
             <p>Return Date: {new Date().toLocaleString()}</p>

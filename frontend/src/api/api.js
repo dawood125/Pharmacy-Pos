@@ -85,6 +85,12 @@ export const api = {
     return handleResponse(res);
   },
 
+  getExpiredProducts: async (page = 1, limit = 50) => {
+    const q = new URLSearchParams({ page: String(page), limit: String(limit) });
+    const res = await fetch(`${API_BASE}/products/expired?${q}`, { headers: headers() });
+    return handleResponse(res);
+  },
+
   // Sales
   createSale: async (sale) => {
     const res = await fetch(`${API_BASE}/sales`, {

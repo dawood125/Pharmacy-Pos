@@ -3,6 +3,7 @@ import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, Wallet
 import { api } from "../api/api";
 import { useToast } from "../common/Toast";
 import { useCart } from "../common/CartContext";
+import { useSettings } from "../common/SettingsContext";
 
 const Rs = (n) => {
   const x = Number(n);
@@ -14,6 +15,7 @@ const GRID_PAGE_SIZE = 24;
 
 export default function ProfessionalPOS() {
   const { addToast } = useToast();
+  const { settings } = useSettings();
   const {
     cart, addToCart, updateQty, setLineQty, removeItem, clearCart,
     paymentMethod, setPaymentMethod, cash, setCash
@@ -435,8 +437,13 @@ export default function ProfessionalPOS() {
 
       <div className="hidden print:block w-[80mm] mx-auto p-3 text-black font-sans text-[11px] leading-tight">
         <div className="text-center mb-3 border-b-2 border-black pb-2">
-          <h1 className="text-lg font-black uppercase mb-1">MedFlow Pharmacy</h1>
-          <p className="text-[9px]">123 Health Avenue, Medical City</p>
+          <h1 className="text-lg font-black uppercase mb-1">{settings?.storeName || 'Pharmacy'}</h1>
+          {settings?.storeAddress ? (
+            <p className="text-[9px] whitespace-pre-line">{settings.storeAddress}</p>
+          ) : null}
+          {settings?.storePhone ? (
+            <p className="text-[9px]">Tel: {settings.storePhone}</p>
+          ) : null}
           <div className="mt-1 text-left text-[9px]">
             <p>Invoice: {invoiceNo}</p>
             <p>Date: {new Date().toLocaleString()}</p>
@@ -479,7 +486,7 @@ export default function ProfessionalPOS() {
         </div>
 
         <div className="text-center text-[9px] italic pt-2 border-t border-black">
-          <p className="font-bold">Thank you!</p>
+          <p className="font-bold whitespace-pre-line">{settings?.receiptFooter?.trim() || 'Thank you!'}</p>
           <p>No return without receipt.</p>
         </div>
       </div>

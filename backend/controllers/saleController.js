@@ -1,4 +1,5 @@
 import { dbGet, dbRun, dbAll } from '../config/db.js';
+import { isProductExpired } from '../utils/dateHelpers.js';
 
 const generateInvoiceNumber = () => {
   return `INV-${Date.now().toString().slice(-6)}`;
@@ -22,8 +23,16 @@ export const createSale = async (req, res) => {
         return res.status(400).json({ message: `Product not found: ${item.name}` });
       }
 
+      if (product.status !== 'active') {
+        return res.status(400).json({ message: `Product is not available for sale: ${product.name}` });
+      }
+
       if (product.quantity < item.qty) {
         return res.status(400).json({ message: `Insufficient stock for ${product.name}` });
+      }
+
+      if (isProductExpired(product.expiry_date)) {
+        return res.status(400).json({ message: `Cannot sell expired product: ${product.name}` });
       }
 
       dbRun('UPDATE products SET quantity = quantity - ? WHERE id = ?', [item.qty, item.id]);
