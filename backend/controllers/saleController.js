@@ -14,6 +14,7 @@ export const createSale = async (req, res) => {
     }
 
     let subtotal = 0;
+    let totalDiscountAmount = 0;
     const saleItems = [];
 
     for (const item of items) {
@@ -37,8 +38,13 @@ export const createSale = async (req, res) => {
 
       dbRun('UPDATE products SET quantity = quantity - ? WHERE id = ?', [item.qty, item.id]);
 
-      const itemTotal = product.sale_price * item.qty;
-      subtotal += itemTotal;
+      const baseItemTotal = product.sale_price * item.qty;
+      const discountPct = Number(item.discount) || 0;
+      const discountAmount = baseItemTotal * (discountPct / 100);
+      const itemTotal = baseItemTotal - discountAmount;
+      
+      subtotal += baseItemTotal;
+      totalDiscountAmount += discountAmount;
 
       saleItems.push({
         product: product.id,
@@ -46,19 +52,21 @@ export const createSale = async (req, res) => {
         quantity: item.qty,
         unitPrice: product.sale_price,
         unitPurchasePrice: Number(product.purchase_price) || 0,
+        discountPct: discountPct,
+        discountAmount: discountAmount,
         returnedQty: 0,
         totalPrice: itemTotal
       });
     }
 
-    const totalAmount = subtotal;
+    const totalAmount = subtotal - totalDiscountAmount;
     const changeGiven = cashReceived ? cashReceived - totalAmount : 0;
     const invoiceNumber = generateInvoiceNumber();
 
     dbRun(`
-      INSERT INTO sales (invoice_number, items, subtotal, total_amount, payment_method, cash_received, change_given, customer_name, cashier_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [invoiceNumber, JSON.stringify(saleItems), subtotal, totalAmount, paymentMethod, cashReceived, changeGiven, customerName || 'Walk-in Customer', cashier || null]);
+      INSERT INTO sales (invoice_number, items, subtotal, discount, total_amount, payment_method, cash_received, change_given, customer_name, cashier_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [invoiceNumber, JSON.stringify(saleItems), subtotal, totalDiscountAmount, totalAmount, paymentMethod, cashReceived, changeGiven, customerName || 'Walk-in Customer', cashier || null]);
 
     const sale = dbGet('SELECT * FROM sales WHERE invoice_number = ?', [invoiceNumber]);
     if (sale) {

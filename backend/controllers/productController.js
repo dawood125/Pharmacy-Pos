@@ -59,9 +59,9 @@ export const getProducts = async (req, res) => {
 
     if (search && String(search).trim()) {
       const term = `%${String(search).trim()}%`;
-      query += ' AND (name LIKE ? OR barcode LIKE ?)';
-      countQuery += ' AND (name LIKE ? OR barcode LIKE ?)';
-      params.push(term, term);
+      query += ' AND (name LIKE ? OR barcode LIKE ? OR manufacturer LIKE ?)';
+      countQuery += ' AND (name LIKE ? OR barcode LIKE ? OR manufacturer LIKE ?)';
+      params.push(term, term, term);
     }
 
     query += search && String(search).trim()
@@ -108,7 +108,10 @@ function assertSaleAboveCost(purchasePrice, salePrice) {
 
 export const createProduct = async (req, res) => {
   try {
-    const { name, barcode, batchNumber, category, purchasePrice, salePrice, quantity, expiryDate, lowStockThreshold } = req.body;
+    const { 
+      name, barcode, batchNumber, category, purchasePrice, salePrice, quantity, expiryDate, lowStockThreshold,
+      piecesPerPack, manufacturer, rackNumber, minDiscount, maxDiscount, isPrintable
+    } = req.body;
 
     const priceErr = assertSaleAboveCost(purchasePrice, salePrice);
     if (priceErr) {
@@ -123,9 +126,28 @@ export const createProduct = async (req, res) => {
     }
 
     dbRun(`
-      INSERT INTO products (name, barcode, batch_number, category, purchase_price, sale_price, quantity, expiry_date, low_stock_threshold)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [name, barcode || null, batchNumber || null, category || null, purchasePrice, salePrice, quantity || 0, expiryDate || null, lowStockThreshold || 10]);
+      INSERT INTO products (
+        name, barcode, batch_number, category, purchase_price, sale_price, quantity, expiry_date, low_stock_threshold,
+        pieces_per_pack, manufacturer, rack_number, min_discount, max_discount, is_printable
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      name, 
+      barcode || null, 
+      batchNumber || null, 
+      category || null, 
+      purchasePrice, 
+      salePrice, 
+      quantity || 0, 
+      expiryDate || null, 
+      lowStockThreshold || 10,
+      piecesPerPack !== undefined ? piecesPerPack : 1,
+      manufacturer || null,
+      rackNumber || null,
+      minDiscount !== undefined ? minDiscount : 0,
+      maxDiscount !== undefined ? maxDiscount : 100,
+      isPrintable !== undefined ? isPrintable : 1
+    ]);
 
     const { id } = dbGet('SELECT last_insert_rowid() as id');
     const newId = typeof id === 'bigint' ? Number(id) : id;
@@ -138,7 +160,10 @@ export const createProduct = async (req, res) => {
 
 export const updateProduct = async (req, res) => {
   try {
-    const { name, barcode, batchNumber, category, purchasePrice, salePrice, quantity, expiryDate, lowStockThreshold, status } = req.body;
+    const { 
+      name, barcode, batchNumber, category, purchasePrice, salePrice, quantity, expiryDate, lowStockThreshold, status,
+      piecesPerPack, manufacturer, rackNumber, minDiscount, maxDiscount, isPrintable
+    } = req.body;
     const id = req.params.id;
 
     // Get existing product
@@ -184,6 +209,12 @@ export const updateProduct = async (req, res) => {
         expiry_date = ?,
         low_stock_threshold = ?,
         status = ?,
+        pieces_per_pack = ?,
+        manufacturer = ?,
+        rack_number = ?,
+        min_discount = ?,
+        max_discount = ?,
+        is_printable = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `, [
@@ -197,6 +228,12 @@ export const updateProduct = async (req, res) => {
       expiryDate !== undefined ? expiryDate : existing.expiry_date,
       lowStockThreshold !== undefined ? lowStockThreshold : existing.low_stock_threshold,
       status !== undefined ? status : existing.status,
+      piecesPerPack !== undefined ? piecesPerPack : (existing.pieces_per_pack ?? 1),
+      manufacturer !== undefined ? manufacturer : existing.manufacturer,
+      rackNumber !== undefined ? rackNumber : existing.rack_number,
+      minDiscount !== undefined ? minDiscount : (existing.min_discount ?? 0),
+      maxDiscount !== undefined ? maxDiscount : (existing.max_discount ?? 100),
+      isPrintable !== undefined ? isPrintable : (existing.is_printable ?? 1),
       id
     ]);
 

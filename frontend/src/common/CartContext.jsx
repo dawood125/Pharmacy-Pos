@@ -54,7 +54,18 @@ export const CartProvider = ({ children }) => {
         if (exist.qty >= product.quantity) return prev;
         return prev.map(i => i.id === product.id ? { ...i, qty: i.qty + 1 } : i);
       }
-      return [...prev, { id: product.id, name: product.name, price: product.sale_price, qty: 1, stock: product.quantity }];
+      return [...prev, { 
+        id: product.id, 
+        name: product.name, 
+        price: product.sale_price, 
+        qty: 1, 
+        stock: product.quantity,
+        discount: 0,
+        minDiscount: product.min_discount ?? 0,
+        maxDiscount: product.max_discount ?? 100,
+        isPrintable: product.is_printable !== 0,
+        piecesPerPack: product.pieces_per_pack || 1
+      }];
     });
   };
 
@@ -78,12 +89,25 @@ export const CartProvider = ({ children }) => {
     setCart(prev => prev.map(i => (i.id === id ? { ...i, qty: clamped } : i)));
   };
 
+  const setLineDiscount = (id, rawDiscount) => {
+    let disc = Number(rawDiscount);
+    if (!Number.isFinite(disc) || disc < 0) disc = 0;
+    
+    setCart(prev => prev.map(i => {
+      if (i.id === id) {
+        let clampedDisc = Math.max(i.minDiscount, Math.min(i.maxDiscount, disc));
+        return { ...i, discount: clampedDisc };
+      }
+      return i;
+    }));
+  };
+
   const removeItem = (id) => setCart(prev => prev.filter(i => i.id !== id));
 
   return (
     <CartContext.Provider value={{
       cart, setCart,
-      addToCart, updateQty, setLineQty, removeItem, clearCart,
+      addToCart, updateQty, setLineQty, setLineDiscount, removeItem, clearCart,
       paymentMethod, setPaymentMethod,
       cash, setCash
     }}>

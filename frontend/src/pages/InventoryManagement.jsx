@@ -42,10 +42,12 @@ function expiryYmd(item) {
 
 export default function ProfessionalInventory() {
   const { addToast } = useToast();
-  const [form, setForm] = useState({
+  const defaultForm = {
     name: "", batchNumber: "", barcode: "", category: "", categoryOther: "",
-    expiry: "", purchasePrice: "", salePrice: "", quantity: "", lowStockThreshold: 10
-  });
+    expiry: "", purchasePrice: "", salePrice: "", quantity: "", lowStockThreshold: 10,
+    piecesPerPack: 1, manufacturer: "", rackNumber: "", minDiscount: 0, maxDiscount: 100, isPrintable: true
+  };
+  const [form, setForm] = useState(defaultForm);
   const [inventory, setInventory] = useState([]);
   const [editId, setEditId] = useState(null);
   const [search, setSearch] = useState("");
@@ -80,7 +82,10 @@ export default function ProfessionalInventory() {
     return () => clearTimeout(timer);
   }, [search, page, fetchInventory]);
 
-  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+  const handleChange = (e) => {
+    const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+    setForm({ ...form, [e.target.name]: value });
+  };
 
   const margin = useMemo(() => {
     if (!form.purchasePrice || !form.salePrice) return 0;
@@ -117,7 +122,13 @@ export default function ProfessionalInventory() {
         salePrice,
         quantity: Number(form.quantity),
         expiryDate: form.expiry || undefined,
-        lowStockThreshold: Number(form.lowStockThreshold) || 10
+        lowStockThreshold: Number(form.lowStockThreshold) || 10,
+        piecesPerPack: Number(form.piecesPerPack) || 1,
+        manufacturer: form.manufacturer || undefined,
+        rackNumber: form.rackNumber || undefined,
+        minDiscount: Number(form.minDiscount) || 0,
+        maxDiscount: Number(form.maxDiscount) || 100,
+        isPrintable: form.isPrintable ? 1 : 0
       };
 
       if (editId) {
@@ -128,7 +139,7 @@ export default function ProfessionalInventory() {
         addToast('Product added successfully', 'success');
       }
 
-      setForm({ name: "", batchNumber: "", barcode: "", category: "", categoryOther: "", expiry: "", purchasePrice: "", salePrice: "", quantity: "", lowStockThreshold: 10 });
+      setForm(defaultForm);
       setEditId(null);
       setShowModal(false);
       fetchInventory();
@@ -163,7 +174,13 @@ export default function ProfessionalInventory() {
       purchasePrice: item.purchase_price,
       salePrice: item.sale_price,
       quantity: item.quantity,
-      lowStockThreshold: item.low_stock_threshold || 10
+      lowStockThreshold: item.low_stock_threshold || 10,
+      piecesPerPack: item.pieces_per_pack || 1,
+      manufacturer: item.manufacturer || "",
+      rackNumber: item.rack_number || "",
+      minDiscount: item.min_discount !== null ? item.min_discount : 0,
+      maxDiscount: item.max_discount !== null ? item.max_discount : 100,
+      isPrintable: item.is_printable !== 0
     });
     setEditId(item.id);
     setShowModal(true);
@@ -212,7 +229,7 @@ export default function ProfessionalInventory() {
             />
           </div>
           <button
-            onClick={() => { setEditId(null); setForm({ name: "", batchNumber: "", barcode: "", category: "", categoryOther: "", expiry: "", purchasePrice: "", salePrice: "", quantity: "", lowStockThreshold: 10 }); setShowModal(true); }}
+            onClick={() => { setEditId(null); setForm(defaultForm); setShowModal(true); }}
             className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-semibold hover:bg-primary-700"
           >
             <PlusCircle size={16} /> Add Item
@@ -235,8 +252,9 @@ export default function ProfessionalInventory() {
             <thead className="bg-gray-50 sticky top-0">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-bold uppercase text-gray-500">Item</th>
-                <th className="px-4 py-3 text-left text-xs font-bold uppercase text-gray-500">Batch #</th>
+                <th className="px-4 py-3 text-left text-xs font-bold uppercase text-gray-500">Manufacturer</th>
                 <th className="px-4 py-3 text-left text-xs font-bold uppercase text-gray-500">Price</th>
+                <th className="px-4 py-3 text-left text-xs font-bold uppercase text-gray-500">Location</th>
                 <th className="px-4 py-3 text-left text-xs font-bold uppercase text-gray-500">Stock</th>
                 <th className="px-4 py-3 text-left text-xs font-bold uppercase text-gray-500">Expiry</th>
                 <th className="px-4 py-3 text-right text-xs font-bold uppercase text-gray-500">Actions</th>
@@ -249,20 +267,28 @@ export default function ProfessionalInventory() {
                   <tr key={item.id} className="hover:bg-gray-50 group">
                     <td className="px-4 py-3">
                       <p className="font-bold text-sm text-gray-900">{item.name}</p>
-                      <p className="text-xs text-gray-400">{item.category || 'Uncategorized'}</p>
+                      <p className="text-[10px] text-gray-400">{item.category || 'Uncategorized'} {item.barcode && `· ${item.barcode}`}</p>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-1 rounded">{item.batch_number || '-'}</span>
+                      <span className="text-xs font-semibold text-gray-700">{item.manufacturer || '-'}</span>
                     </td>
                     <td className="px-4 py-3">
                       <p className="font-bold text-sm text-gray-900">{Rs(item.sale_price)}</p>
                       <p className="text-[10px] text-gray-400">Cost: {Rs(item.purchase_price)}</p>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-sm text-gray-900">{item.quantity}</span>
-                        {status && (
-                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${status.color}`}>{status.label}</span>
+                      <span className="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-1 rounded">{item.rack_number || '-'}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-sm text-gray-900">{item.quantity}</span>
+                          {status && (
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${status.color}`}>{status.label}</span>
+                          )}
+                        </div>
+                        {item.pieces_per_pack > 1 && (
+                          <span className="text-[9px] text-gray-400">{item.pieces_per_pack} / pack</span>
                         )}
                       </div>
                     </td>
@@ -310,100 +336,153 @@ export default function ProfessionalInventory() {
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto py-8">
+          <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl my-auto">
             <div className="flex items-center justify-between p-4 border-b">
-              <h3 className="text-lg font-bold">{editId ? 'Edit Item' : 'Add New Item'}</h3>
+              <h3 className="text-lg font-bold">{editId ? 'Edit Medicine' : 'Add New Medicine'}</h3>
               <button type="button" onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded">
                 <X size={20} className="text-gray-500" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-4 space-y-3">
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase">Name *</label>
-                <input name="name" value={form.name} onChange={handleChange} required
-                  className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-sm font-medium" placeholder="Medicine Name" />
+            <form onSubmit={handleSubmit} className="p-5 space-y-4">
+              {/* Row 1 */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-gray-500 uppercase">Medicine Name *</label>
+                  <input name="name" value={form.name} onChange={handleChange} required
+                    className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-sm font-bold" placeholder="E.g. Panadol" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-gray-500 uppercase">Manufacturer</label>
+                  <input name="manufacturer" value={form.manufacturer} onChange={handleChange}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-sm" placeholder="E.g. GSK" />
+                </div>
               </div>
 
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase">Category *</label>
-                <select
-                  name="category"
-                  value={form.category}
-                  onChange={handleChange}
-                  required
-                  className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-sm font-medium"
-                >
-                  <option value="">Select category…</option>
-                  {MEDICINE_CATEGORIES.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-                {form.category === OTHER_CATEGORY && (
-                  <input
-                    name="categoryOther"
-                    value={form.categoryOther}
+              {/* Row 2 */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-gray-500 uppercase">Category *</label>
+                  <select
+                    name="category"
+                    value={form.category}
                     onChange={handleChange}
-                    placeholder="Type category name"
-                    className="w-full mt-2 bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-sm"
-                  />
-                )}
+                    required
+                    className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-sm"
+                  >
+                    <option value="">Select category…</option>
+                    {MEDICINE_CATEGORIES.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                  {form.category === OTHER_CATEGORY && (
+                    <input
+                      name="categoryOther"
+                      value={form.categoryOther}
+                      onChange={handleChange}
+                      placeholder="Type category name"
+                      className="w-full mt-2 bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-sm"
+                    />
+                  )}
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-gray-500 uppercase">Location / Rack</label>
+                  <input name="rackNumber" value={form.rackNumber} onChange={handleChange}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-sm" placeholder="E.g. A12" />
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              {/* Row 3 */}
+              <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="text-xs font-bold text-gray-500 uppercase">Barcode</label>
                   <input name="barcode" value={form.barcode} onChange={handleChange}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-sm" placeholder="Barcode" />
+                    className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-sm" placeholder="Scan or type" />
                 </div>
                 <div>
                   <label className="text-xs font-bold text-gray-500 uppercase">Batch #</label>
                   <input name="batchNumber" value={form.batchNumber} onChange={handleChange}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-sm" placeholder="Batch Number" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-gray-500 uppercase">Cost *</label>
-                  <input type="number" name="purchasePrice" value={form.purchasePrice} onChange={handleChange} required
-                    className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-sm" placeholder="0.00" />
+                    className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-sm" placeholder="Batch" />
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-gray-500 uppercase">Price *</label>
-                  <input type="number" name="salePrice" value={form.salePrice} onChange={handleChange} required
-                    className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-sm" placeholder="0.00" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-gray-500 uppercase">Quantity *</label>
-                  <input type="number" name="quantity" value={form.quantity} onChange={handleChange} required
-                    className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-sm" placeholder="0" />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-gray-500 uppercase">Expiry</label>
+                  <label className="text-xs font-bold text-gray-500 uppercase">Expiry Date</label>
                   <input type="date" name="expiry" value={form.expiry} onChange={handleChange}
                     className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-sm" />
                 </div>
               </div>
 
+              {/* Row 4 */}
+              <div className="grid grid-cols-4 gap-4 p-3 bg-blue-50 rounded-xl">
+                <div>
+                  <label className="text-xs font-bold text-blue-700 uppercase">Cost *</label>
+                  <input type="number" step="0.01" name="purchasePrice" value={form.purchasePrice} onChange={handleChange} required
+                    className="w-full bg-white border border-blue-200 rounded-lg p-2 text-sm" placeholder="0.00" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-blue-700 uppercase">Sale Price *</label>
+                  <input type="number" step="0.01" name="salePrice" value={form.salePrice} onChange={handleChange} required
+                    className="w-full bg-white border border-blue-200 rounded-lg p-2 text-sm font-bold text-blue-900" placeholder="0.00" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-blue-700 uppercase">Total Stock *</label>
+                  <input type="number" name="quantity" value={form.quantity} onChange={handleChange} required
+                    className="w-full bg-white border border-blue-200 rounded-lg p-2 text-sm" placeholder="0" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-blue-700 uppercase">Pcs / Pack</label>
+                  <input type="number" min="1" name="piecesPerPack" value={form.piecesPerPack} onChange={handleChange}
+                    className="w-full bg-white border border-blue-200 rounded-lg p-2 text-sm" placeholder="1" />
+                </div>
+              </div>
+
               {Number(margin) > 0 && (
-                <div className="text-xs font-bold text-emerald-600 bg-emerald-50 p-2 rounded-lg text-center">
-                  Profit Margin: {margin}%
+                <div className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg text-center">
+                  Est. Profit Margin: {margin}%
                 </div>
               )}
 
-              <div className="flex gap-2 pt-2">
+              {/* Row 5 */}
+              <div className="grid grid-cols-3 gap-4 p-3 bg-gray-50 border border-gray-100 rounded-xl">
+                <div>
+                  <label className="text-[10px] font-bold text-gray-500 uppercase">Reorder Alert At</label>
+                  <input type="number" name="lowStockThreshold" value={form.lowStockThreshold} onChange={handleChange}
+                    className="w-full bg-white border border-gray-200 rounded-lg p-2 text-xs" placeholder="10" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-gray-500 uppercase">Min Discount %</label>
+                  <input type="number" min="0" max="100" name="minDiscount" value={form.minDiscount} onChange={handleChange}
+                    className="w-full bg-white border border-gray-200 rounded-lg p-2 text-xs" placeholder="0" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-gray-500 uppercase">Max Discount %</label>
+                  <input type="number" min="0" max="100" name="maxDiscount" value={form.maxDiscount} onChange={handleChange}
+                    className="w-full bg-white border border-gray-200 rounded-lg p-2 text-xs" placeholder="100" />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 px-1">
+                <input 
+                  type="checkbox" 
+                  id="isPrintable" 
+                  name="isPrintable" 
+                  checked={form.isPrintable} 
+                  onChange={handleChange}
+                  className="w-4 h-4 text-primary-600 rounded border-gray-300 focus:ring-primary-500"
+                />
+                <label htmlFor="isPrintable" className="text-sm font-medium text-gray-700">
+                  Show on printed receipt (Uncheck for restricted medicines)
+                </label>
+              </div>
+
+              <div className="flex gap-2 pt-2 border-t mt-4">
                 <button type="button" onClick={() => setShowModal(false)}
-                  className="flex-1 py-2.5 rounded-lg font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50">
+                  className="w-1/3 py-2.5 rounded-xl font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50">
                   Cancel
                 </button>
                 <button type="submit"
-                  className={`flex-1 py-2.5 rounded-lg font-semibold text-white ${editId ? 'bg-gray-900' : 'bg-primary-600'}`}>
-                  {editId ? 'Save Changes' : 'Add Item'}
+                  className={`w-2/3 py-2.5 rounded-xl font-semibold text-white shadow-sm ${editId ? 'bg-gray-900 hover:bg-black' : 'bg-primary-600 hover:bg-primary-700'}`}>
+                  {editId ? 'Save Changes' : 'Add Medicine'}
                 </button>
               </div>
             </form>

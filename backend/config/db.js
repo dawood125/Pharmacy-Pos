@@ -94,6 +94,29 @@ export const initializeDatabase = async () => {
     );
   `);
 
+  // Migrate new fields for products if they don't exist
+  const tableInfo = db.exec("PRAGMA table_info(products)")[0]?.values || [];
+  const columns = tableInfo.map(col => col[1]);
+
+  if (!columns.includes('pieces_per_pack')) {
+    db.run('ALTER TABLE products ADD COLUMN pieces_per_pack INTEGER DEFAULT 1');
+  }
+  if (!columns.includes('manufacturer')) {
+    db.run('ALTER TABLE products ADD COLUMN manufacturer TEXT');
+  }
+  if (!columns.includes('rack_number')) {
+    db.run('ALTER TABLE products ADD COLUMN rack_number TEXT');
+  }
+  if (!columns.includes('min_discount')) {
+    db.run('ALTER TABLE products ADD COLUMN min_discount REAL DEFAULT 0');
+  }
+  if (!columns.includes('max_discount')) {
+    db.run('ALTER TABLE products ADD COLUMN max_discount REAL DEFAULT 100');
+  }
+  if (!columns.includes('is_printable')) {
+    db.run('ALTER TABLE products ADD COLUMN is_printable INTEGER DEFAULT 1');
+  }
+
   // Create indexes
   db.run(`CREATE INDEX IF NOT EXISTS idx_products_name ON products(name)`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode)`);

@@ -138,8 +138,12 @@ export const api = {
   },
 
   // Reports
-  getDailySales: async (date) => {
-    const res = await fetch(`${API_BASE}/reports/daily?date=${date}`, { headers: headers() });
+  getDailySales: async (date, startDate, endDate) => {
+    const q = new URLSearchParams();
+    if (date) q.set('date', date);
+    if (startDate) q.set('startDate', startDate);
+    if (endDate) q.set('endDate', endDate);
+    const res = await fetch(`${API_BASE}/reports/daily?${q}`, { headers: headers() });
     return handleResponse(res);
   },
 
@@ -148,8 +152,11 @@ export const api = {
     return handleResponse(res);
   },
 
-  getBestSelling: async (limit = 10) => {
-    const res = await fetch(`${API_BASE}/reports/best-selling?limit=${limit}`, { headers: headers() });
+  getBestSelling: async (limit = 10, startDate, endDate) => {
+    const q = new URLSearchParams({ limit: String(limit) });
+    if (startDate) q.set('startDate', startDate);
+    if (endDate) q.set('endDate', endDate);
+    const res = await fetch(`${API_BASE}/reports/best-selling?${q}`, { headers: headers() });
     return handleResponse(res);
   },
 

@@ -1,7 +1,10 @@
 import React, { useMemo, useState, useEffect } from "react";
-import { Download, Printer, TrendingUp, DollarSign, Activity, Package } from "lucide-react";
+import { Download, Printer, TrendingUp, DollarSign, Activity, Package, FileText, FileSpreadsheet, Calendar } from "lucide-react";
 import { api } from "../api/api";
 import { useToast } from "../common/Toast";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
+import * as XLSX from "xlsx";
 
 const ITEMS_PER_PAGE = 15;
 const Rs = (n) => {
@@ -9,40 +12,34 @@ const Rs = (n) => {
   return `Rs ${(Number.isFinite(x) ? x : 0).toLocaleString()}`;
 };
 
-const downloadCSV = (data, filename) => {
-  if (!data?.length) return;
-  const headers = Object.keys(data[0]).join(",");
-  const rows = data.map((row) => Object.values(row).map((value) => `"${value}"`).join(","));
-  const csv = [headers, ...rows].join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = `${filename}.csv`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-};
-
 export default function PharmacyReports() {
   const { addToast } = useToast();
   const [activeTab, setActiveTab] = useState("daily");
   const [page, setPage] = useState(1);
-  const [data, setData] = useState({ daily: [], profit: [], best: [] });
+  const [data, setData] = useState({ daily: [], profit: [], best: [], lowStock: [] });
   const [expiredReport, setExpiredReport] = useState({ products: [], totalPages: 1, total: 0 });
   const [expiredPage, setExpiredPage] = useState(1);
   const [meta, setMeta] = useState({ dailySummary: null, monthlySummary: null });
   const [loading, setLoading] = useState(true);
+  
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().split('T')[0];
+  });
+  const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   useEffect(() => {
     fetchReportData();
-  }, [activeTab, expiredPage]);
+  }, [activeTab, expiredPage, startDate, endDate]);
 
   const fetchReportData = async () => {
     setLoading(true);
     try {
       if (activeTab === 'daily') {
         const today = new Date().toISOString().split('T')[0];
-        const result = await api.getDailySales(today);
+        const result = await api.getDailySales(today, startDate, endDate);
         setData(prev => ({ ...prev, daily: result.sales || [] }));
         setMeta(prev => ({ ...prev, dailySummary: result.summary || null }));
       } else if (activeTab === 'profit') {
@@ -51,7 +48,7 @@ export default function PharmacyReports() {
         setData(prev => ({ ...prev, profit: result.dailyData || [] }));
         setMeta(prev => ({ ...prev, monthlySummary: result.summary || null }));
       } else if (activeTab === 'best') {
-        const result = await api.getBestSelling(20);
+        const result = await api.getBestSelling(20, startDate, endDate);
         setData(prev => ({ ...prev, best: result || [] }));
       } else if (activeTab === 'expired') {
         const result = await api.getExpiredProducts(expiredPage, ITEMS_PER_PAGE);
@@ -60,6 +57,9 @@ export default function PharmacyReports() {
           totalPages: Math.max(1, result.totalPages || 1),
           total: result.total ?? 0
         });
+      } else if (activeTab === 'lowStock') {
+        const result = await api.getLowStock();
+        setData(prev => ({ ...prev, lowStock: result || [] }));
       }
     } catch (err) {
       addToast('Failed to load reports', 'error');
@@ -68,26 +68,89 @@ export default function PharmacyReports() {
     }
   };
 
-  const handleExport = () => {
+  const getExportData = () => {
     let currentData = [];
     if (activeTab === 'expired') {
       currentData = (expiredReport.products || []).map((p) => ({
-        name: p.name,
-        barcode: p.barcode || '',
-        batch_number: p.batch_number || '',
-        category: p.category || '',
-        quantity: p.quantity,
-        expiry_date: p.expiry_date,
-        sale_price: p.sale_price,
-        purchase_price: p.purchase_price
+        Name: p.name,
+        Barcode: p.barcode || '',
+        Batch: p.batch_number || '',
+        Category: p.category || '',
+        Qty: p.quantity,
+        Expiry: p.expiry_date,
+        SalePrice: p.sale_price,
+        PurchasePrice: p.purchase_price
       }));
-    } else {
-      currentData = data[activeTab] || [];
+    } else if (activeTab === 'daily') {
+      currentData = (data.daily || []).map(item => ({
+        Date: item.created_at ? new Date(item.created_at).toLocaleDateString() : '-',
+        Invoice: item.invoice_number,
+        Items: item.items?.length || 0,
+        Revenue: item.total_amount,
+        Profit: item.profit ?? 0
+      }));
+    } else if (activeTab === 'profit') {
+      currentData = (data.profit || []).map(item => ({
+        Date: item.date,
+        Revenue: item.revenue,
+        Cost: item.cost,
+        Profit: item.profit,
+        Margin: `${item.margin}%`
+      }));
+    } else if (activeTab === 'best') {
+      currentData = (data.best || []).map((item, index) => ({
+        Rank: index + 1,
+        Medicine: item.name,
+        SoldQty: item.sold,
+        Revenue: item.revenue
+      }));
+    } else if (activeTab === 'lowStock') {
+      currentData = (data.lowStock || []).map(item => ({
+        Medicine: item.name,
+        Category: item.category || '',
+        Qty: item.quantity,
+        PurchasePrice: item.purchase_price,
+        SalePrice: item.sale_price
+      }));
     }
-    if (currentData.length > 0) {
-      downloadCSV(currentData, `${activeTab}-report`);
-      addToast('Report exported successfully', 'success');
-    }
+    return currentData;
+  };
+
+  const handleExportXLSX = () => {
+    const exportData = getExportData();
+    if (!exportData.length) return addToast('No data to export', 'warning');
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Report");
+    XLSX.writeFile(wb, `Pharmacy_${activeTab}_report.xlsx`);
+    addToast('Excel report generated successfully', 'success');
+    setShowExportMenu(false);
+  };
+
+  const handleExportPDF = () => {
+    const exportData = getExportData();
+    if (!exportData.length) return addToast('No data to export', 'warning');
+    
+    const doc = new jsPDF();
+    doc.text(`Pharmacy ${activeTab.toUpperCase()} Report`, 14, 15);
+    doc.setFontSize(10);
+    doc.text(`Date: ${new Date().toLocaleDateString()}`, 14, 22);
+    
+    const headers = Object.keys(exportData[0]);
+    const body = exportData.map(obj => Object.values(obj));
+
+    doc.autoTable({
+      startY: 28,
+      head: [headers],
+      body: body,
+      theme: 'grid',
+      headStyles: { fillColor: [14, 165, 233] },
+      styles: { fontSize: 8 }
+    });
+
+    doc.save(`Pharmacy_${activeTab}_report.pdf`);
+    addToast('PDF report generated successfully', 'success');
+    setShowExportMenu(false);
   };
 
   const currentData = data[activeTab] || [];
@@ -110,6 +173,7 @@ export default function PharmacyReports() {
     { key: "daily", label: "Daily Sales", icon: TrendingUp },
     { key: "profit", label: "Monthly Profit", icon: DollarSign },
     { key: "best", label: "Best Selling", icon: Activity },
+    { key: "lowStock", label: "Low Stock", icon: TrendingUp },
     { key: "expired", label: "Expired Medicines", icon: Package }
   ];
 
@@ -117,15 +181,63 @@ export default function PharmacyReports() {
     <div className="max-w-7xl mx-auto space-y-4 fade-in">
 
       {/* Header */}
-      <div className="flex items-center justify-between bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between bg-white p-4 rounded-2xl border border-gray-100 shadow-sm gap-4">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Reports & Analytics</h1>
           <p className="text-sm text-gray-500">Sales, profit, inventory and expired stock</p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 border border-gray-200 bg-white rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50">
-            <Download size={16} /> Export
-          </button>
+        
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Date Pickers (Shown for tabs that support date ranges) */}
+          {(activeTab === 'daily' || activeTab === 'best') && (
+            <div className="flex items-center gap-2 bg-gray-50 p-1.5 rounded-xl border border-gray-200">
+              <div className="flex items-center gap-1.5 px-2">
+                <Calendar size={14} className="text-gray-400" />
+                <input 
+                  type="date" 
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="bg-transparent text-xs font-semibold outline-none text-gray-700"
+                />
+              </div>
+              <span className="text-gray-300">|</span>
+              <div className="flex items-center gap-1.5 px-2">
+                <input 
+                  type="date" 
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="bg-transparent text-xs font-semibold outline-none text-gray-700"
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="relative">
+            <button 
+              onClick={() => setShowExportMenu(!showExportMenu)} 
+              className="flex items-center gap-2 px-4 py-2 border border-gray-200 bg-white rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            >
+              <Download size={16} /> Export
+            </button>
+            
+            {showExportMenu && (
+              <div className="absolute right-0 top-full mt-2 w-40 bg-white rounded-xl shadow-lg border border-gray-100 z-50 overflow-hidden">
+                <button 
+                  onClick={handleExportXLSX}
+                  className="w-full text-left px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                >
+                  <FileSpreadsheet size={16} className="text-emerald-500" /> Excel (.xlsx)
+                </button>
+                <button 
+                  onClick={handleExportPDF}
+                  className="w-full text-left px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 flex items-center gap-2 border-t border-gray-50"
+                >
+                  <FileText size={16} className="text-rose-500" /> PDF Document
+                </button>
+              </div>
+            )}
+          </div>
+          
           <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-xl text-sm font-semibold hover:bg-primary-700">
             <Printer size={16} /> Print
           </button>
@@ -286,6 +398,36 @@ export default function PharmacyReports() {
                       <td className="px-4 py-3 font-bold">{item.name}</td>
                       <td className="px-4 py-3 text-center"><span className="bg-primary-50 text-primary-600 px-2 py-1 rounded text-xs font-bold">{item.sold}</span></td>
                       <td className="px-4 py-3 text-right font-black">{Rs(item.revenue)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              )
+            )}
+
+            {activeTab === "lowStock" && (
+              paginatedData.length === 0 ? (
+                <div className="py-16 text-center text-gray-400">
+                  <TrendingUp size={40} className="mx-auto mb-2 opacity-30" />
+                  <p className="text-sm font-medium">No low stock items</p>
+                </div>
+              ) : (
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th className="px-4 py-3 text-xs font-bold uppercase text-gray-500 text-left">Medicine</th>
+                    <th className="px-4 py-3 text-xs font-bold uppercase text-gray-500 text-left">Category</th>
+                    <th className="px-4 py-3 text-xs font-bold uppercase text-gray-500 text-center">Qty</th>
+                    <th className="px-4 py-3 text-xs font-bold uppercase text-gray-500 text-right">Sale Price</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {paginatedData.map((item) => (
+                    <tr key={item.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 font-bold">{item.name}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{item.category || '—'}</td>
+                      <td className="px-4 py-3 text-center"><span className="bg-amber-50 text-amber-600 px-2 py-1 rounded text-xs font-bold">{item.quantity}</span></td>
+                      <td className="px-4 py-3 text-right font-black">{Rs(item.sale_price)}</td>
                     </tr>
                   ))}
                 </tbody>

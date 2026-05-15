@@ -17,7 +17,7 @@ export default function ProfessionalPOS() {
   const { addToast } = useToast();
   const { settings } = useSettings();
   const {
-    cart, addToCart, updateQty, setLineQty, removeItem, clearCart,
+    cart, addToCart, updateQty, setLineQty, setLineDiscount, removeItem, clearCart,
     paymentMethod, setPaymentMethod, cash, setCash
   } = useCart();
 
@@ -139,7 +139,7 @@ export default function ProfessionalPOS() {
     }
   };
 
-  const subtotal = useMemo(() => cart.reduce((a, i) => a + i.price * i.qty, 0), [cart]);
+  const subtotal = useMemo(() => cart.reduce((a, i) => a + (i.price * i.qty * (1 - (i.discount || 0) / 100)), 0), [cart]);
   const change = cash ? Number(cash) - subtotal : 0;
 
   const handleCheckout = async () => {
@@ -155,7 +155,12 @@ export default function ProfessionalPOS() {
     setPrinting(true);
     try {
       const saleData = {
-        items: cart.map(item => ({ id: item.id, name: item.name, qty: item.qty })),
+        items: cart.map(item => ({ 
+          id: item.id, 
+          name: item.name, 
+          qty: item.qty,
+          discount: item.discount || 0 
+        })),
         paymentMethod: paymentMethod.toLowerCase(),
         cashReceived: paymentMethod === "Cash" ? Number(cash) : null,
         customerName: "Walk-in Customer"
@@ -212,7 +217,10 @@ export default function ProfessionalPOS() {
                         idx === highlightIndex ? "bg-primary-50" : "hover:bg-gray-50"
                       } ${p.quantity <= 0 ? "opacity-50" : ""}`}
                     >
-                      <span className="font-semibold text-gray-900 truncate">{p.name}</span>
+                      <span className="font-semibold text-gray-900 truncate">
+                        {p.name}
+                        {p.manufacturer && <span className="ml-1 text-[10px] text-gray-400">· {p.manufacturer}</span>}
+                      </span>
                       <span className="shrink-0 text-xs font-black text-primary-600">{Rs(p.sale_price)}</span>
                     </button>
                   </li>
@@ -251,11 +259,15 @@ export default function ProfessionalPOS() {
                   <span className="font-bold text-gray-900 text-sm line-clamp-2 block">
                     {p.name}
                   </span>
+                  <div className="flex gap-2 text-[10px] text-gray-400 mt-1 line-clamp-1">
+                    {p.manufacturer && <span>{p.manufacturer}</span>}
+                    {p.rack_number && <span>· Rack: {p.rack_number}</span>}
+                  </div>
                   <div className="flex items-center justify-between mt-2">
                     <span className="text-sm font-black text-primary-600">{Rs(p.sale_price)}</span>
                     <div className="flex items-center gap-1">
                       <div className={`w-1.5 h-1.5 rounded-full ${p.quantity > 10 ? 'bg-emerald-400' : p.quantity > 0 ? 'bg-amber-400' : 'bg-red-400'}`}></div>
-                      <span className="text-[10px] font-bold text-gray-400">{p.quantity}</span>
+                      <span className="text-[10px] font-bold text-gray-400">{p.quantity} {p.pieces_per_pack > 1 && `(${p.pieces_per_pack}/pk)`}</span>
                     </div>
                   </div>
                 </button>
@@ -320,6 +332,7 @@ export default function ProfessionalPOS() {
               <thead className="bg-gray-50/80 border-b border-gray-100">
                 <tr>
                   <th className="px-3 py-2 text-[10px] font-bold uppercase text-gray-400">Item</th>
+                  <th className="px-2 py-2 text-[10px] font-bold uppercase text-gray-400 text-center">Disc%</th>
                   <th className="px-2 py-2 text-[10px] font-bold uppercase text-gray-400 text-center">Qty</th>
                   <th className="px-3 py-2 text-[10px] font-bold uppercase text-gray-400 text-right">Total</th>
                   <th className="px-2 py-2"></th>
@@ -330,7 +343,17 @@ export default function ProfessionalPOS() {
                   <tr key={i.id} className="group hover:bg-gray-50/50">
                     <td className="px-3 py-2">
                       <p className="font-bold text-xs text-gray-900 line-clamp-1">{i.name}</p>
-                      <p className="text-[10px] font-medium text-gray-400">{Rs(i.price)}</p>
+                      <p className="text-[10px] font-medium text-gray-400">{Rs(i.price)} {i.piecesPerPack > 1 && `(${i.piecesPerPack}/pk)`}</p>
+                    </td>
+                    <td className="px-2 py-2 text-center">
+                       <input
+                         type="number"
+                         min={i.minDiscount || 0}
+                         max={i.maxDiscount || 100}
+                         value={i.discount || 0}
+                         onChange={(e) => setLineDiscount(i.id, e.target.value)}
+                         className="w-12 px-1 py-1 text-center text-xs border border-gray-200 rounded-lg bg-white"
+                       />
                     </td>
                     <td className="px-2 py-2">
                       <div className="flex items-center justify-center gap-1">
@@ -341,13 +364,13 @@ export default function ProfessionalPOS() {
                           max={i.stock}
                           value={i.qty}
                           onChange={(e) => setLineQty(i.id, e.target.value, i.stock)}
-                          className="w-14 min-w-[3.5rem] px-1 py-1 text-center text-xs font-bold border border-gray-200 rounded-lg bg-white"
+                          className="w-10 min-w-[2.5rem] px-1 py-1 text-center text-xs font-bold border border-gray-200 rounded-lg bg-white"
                         />
                         <button type="button" onClick={() => updateQty(i.id, 1, i.stock)} className="w-6 h-7 flex items-center justify-center text-gray-400 hover:text-primary-600 rounded border border-gray-200 bg-white shrink-0"><Plus size={10} /></button>
                       </div>
                     </td>
                     <td className="px-3 py-2 text-right font-bold text-xs text-gray-900">
-                      {Rs(i.price * i.qty)}
+                      {Rs(i.price * i.qty * (1 - (i.discount || 0) / 100))}
                     </td>
                     <td className="px-2 py-2">
                       <button onClick={() => removeItem(i.id)} className="p-1 text-gray-300 hover:text-red-500 rounded">
@@ -457,11 +480,11 @@ export default function ProfessionalPOS() {
             <span className="w-1/4 text-center">Qty</span>
             <span className="w-1/4 text-right">Total</span>
           </div>
-          {cart.map(i => (
+          {cart.filter(i => i.isPrintable).map(i => (
             <div key={i.id} className="flex justify-between mb-0.5">
-              <span className="w-1/2 text-[9px] line-clamp-1">{i.name}</span>
+              <span className="w-1/2 text-[9px] line-clamp-1">{i.name} {i.discount > 0 && `(-${i.discount}%)`}</span>
               <span className="w-1/4 text-center text-[9px]">{i.qty}</span>
-              <span className="w-1/4 text-right text-[9px]">{Rs(i.price * i.qty)}</span>
+              <span className="w-1/4 text-right text-[9px]">{Rs(i.price * i.qty * (1 - (i.discount || 0)/100))}</span>
             </div>
           ))}
         </div>

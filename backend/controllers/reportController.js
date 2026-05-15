@@ -36,21 +36,58 @@ function buildPurchaseMapForSales(salesRows) {
 
 export const getDailySales = async (req, res) => {
   try {
-    const { date } = req.query;
-    const targetDate = date || new Date().toISOString().split('T')[0];
+    const { date, startDate, endDate } = req.query;
+    
+    let salesQuery = `SELECT * FROM sales WHERE ${SALE_STATUSES_SQL}`;
+    let returnsQuery = `SELECT * FROM returns WHERE 1=1`;
+    const params = [];
+    
+    if (startDate && endDate) {
+      salesQuery += ' AND date(created_at) >= ? AND date(created_at) <= ?';
+      returnsQuery += ' AND date(created_at) >= ? AND date(created_at) <= ?';
+      params.push(startDate, endDate);
+    } else {
+      const targetDate = date || new Date().toISOString().split('T')[0];
+      salesQuery += ' AND date(created_at) = ?';
+      returnsQuery += ' AND date(created_at) = ?';
+      params.push(targetDate);
+    }
 
-    const sales = dbAll(
-      `
-      SELECT * FROM sales
-      WHERE date(created_at) = ? AND ${SALE_STATUSES_SQL}
-    `,
-      [targetDate]
-    );
+    const sales = dbAll(salesQuery, params);
+    const dayReturns = dbAll(returnsQuery, params);
 
     const purchaseMap = buildPurchaseMapForSales(sales);
 
-    const totalRevenue = sales.reduce((sum, sale) => sum + Number(sale.total_amount || 0), 0);
-    const totalProfit = sumSalesProfit(sales);
+    let totalRevenue = sales.reduce((sum, sale) => sum + Number(sale.total_amount || 0), 0);
+    let totalProfit = sumSalesProfit(sales);
+
+    // Adjust revenue and profit for returns made on this day for PAST sales
+    const returnsForPastSales = dayReturns.filter(r => {
+      const sale = dbGet('SELECT created_at FROM sales WHERE invoice_number = ?', [r.original_invoice]);
+      if (!sale || !sale.created_at) return false;
+      const saleDate = sale.created_at.substring(0, 10);
+      if (startDate && endDate) {
+        return saleDate < startDate;
+      } else {
+        const targetDate = date || new Date().toISOString().split('T')[0];
+        return saleDate !== targetDate;
+      }
+    });
+
+    for (const r of returnsForPastSales) {
+      const refund = Number(r.total_refund || 0);
+      totalRevenue -= refund;
+
+      let costRecovered = 0;
+      const retItems = r.items ? (typeof r.items === 'string' ? JSON.parse(r.items) : r.items) : [];
+      for (const item of retItems) {
+        const prod = dbGet('SELECT purchase_price FROM products WHERE id = ?', [item.product]);
+        if (prod) {
+          costRecovered += (Number(prod.purchase_price) || 0) * (Number(item.quantity) || 0);
+        }
+      }
+      totalProfit -= (refund - costRecovered);
+    }
 
     const salesWithItems = sales.map(sale => {
       const items = parseSaleItems(sale);
@@ -61,13 +98,21 @@ export const getDailySales = async (req, res) => {
         profit: Number.isFinite(profit) ? profit : 0
       };
     });
+    
+    // Also parse items for returns so frontend can use them
+    const returnsWithItems = dayReturns.map(r => ({
+      ...r,
+      items: r.items ? (typeof r.items === 'string' ? JSON.parse(r.items) : r.items) : []
+    }));
 
     res.json({
       sales: salesWithItems,
+      returns: returnsWithItems,
       summary: {
-        totalSales: sales.length,
+        totalSales: sales.filter(s => s.status !== 'fully_returned').length,
         totalRevenue,
-        totalProfit
+        totalProfit,
+        totalRefunds: dayReturns.reduce((sum, r) => sum + Number(r.total_refund || 0), 0)
       }
     });
   } catch (error) {
@@ -94,6 +139,14 @@ export const getMonthlyReport = async (req, res) => {
       [startDate, endDate]
     );
 
+    const monthReturns = dbAll(
+      `
+      SELECT * FROM returns
+      WHERE date(created_at) >= ? AND date(created_at) <= ?
+    `,
+      [startDate, endDate]
+    );
+
     const purchaseMap = buildPurchaseMapForSales(sales);
 
     const dailyMap = new Map();
@@ -109,12 +162,47 @@ export const getMonthlyReport = async (req, res) => {
       );
       const profit = revenue - cost;
 
-      const existing = dailyMap.get(day) || { revenue: 0, cost: 0, profit: 0 };
+      const existing = dailyMap.get(day) || { revenue: 0, cost: 0, profit: 0, refunds: 0 };
       dailyMap.set(day, {
+        ...existing,
         revenue: existing.revenue + revenue,
         cost: existing.cost + cost,
         profit: existing.profit + profit
       });
+    });
+
+    monthReturns.forEach(r => {
+      const day = saleCalendarDay(r.created_at);
+      if (!day) return;
+      
+      const sale = dbGet('SELECT created_at FROM sales WHERE invoice_number = ?', [r.original_invoice]);
+      if (sale && sale.created_at && !sale.created_at.startsWith(day)) {
+        const refund = Number(r.total_refund || 0);
+        let costRecovered = 0;
+        const retItems = r.items ? (typeof r.items === 'string' ? JSON.parse(r.items) : r.items) : [];
+        for (const item of retItems) {
+          const prod = dbGet('SELECT purchase_price FROM products WHERE id = ?', [item.product]);
+          if (prod) {
+            costRecovered += (Number(prod.purchase_price) || 0) * (Number(item.quantity) || 0);
+          }
+        }
+        
+        const existing = dailyMap.get(day) || { revenue: 0, cost: 0, profit: 0, refunds: 0 };
+        dailyMap.set(day, {
+          ...existing,
+          revenue: existing.revenue - refund,
+          profit: existing.profit - (refund - costRecovered),
+          refunds: existing.refunds + refund
+        });
+      } else if (sale) {
+         // Already netted out of today's sales total_amount, but let's record the refund amount
+         const refund = Number(r.total_refund || 0);
+         const existing = dailyMap.get(day) || { revenue: 0, cost: 0, profit: 0, refunds: 0 };
+         dailyMap.set(day, {
+           ...existing,
+           refunds: existing.refunds + refund
+         });
+      }
     });
 
     const dailyData = [];
@@ -132,25 +220,48 @@ export const getMonthlyReport = async (req, res) => {
 
     dailyData.sort((a, b) => a.date.localeCompare(b.date));
 
-    const totalRevenue = sales.reduce((sum, s) => sum + Number(s.total_amount || 0), 0);
-    const totalCost = sales.reduce((sum, s) => {
+    let totalRevenue = sales.reduce((sum, s) => sum + Number(s.total_amount || 0), 0);
+    let totalCost = sales.reduce((sum, s) => {
       const items = parseSaleItems(s);
       return sum + items.reduce(
         (itemSum, item) => itemSum + lineCost(item, purchaseMap[item.product] ?? 0),
         0
       );
     }, 0);
+    let totalProfit = totalRevenue - totalCost;
+    
+    // Adjust total for returns of past month sales
+    const returnsForPastSales = monthReturns.filter(r => {
+      const sale = dbGet('SELECT created_at FROM sales WHERE invoice_number = ?', [r.original_invoice]);
+      return sale && sale.created_at && sale.created_at < startDate;
+    });
+
+    for (const r of returnsForPastSales) {
+      const refund = Number(r.total_refund || 0);
+      totalRevenue -= refund;
+
+      let costRecovered = 0;
+      const retItems = r.items ? (typeof r.items === 'string' ? JSON.parse(r.items) : r.items) : [];
+      for (const item of retItems) {
+        const prod = dbGet('SELECT purchase_price FROM products WHERE id = ?', [item.product]);
+        if (prod) {
+          costRecovered += (Number(prod.purchase_price) || 0) * (Number(item.quantity) || 0);
+        }
+      }
+      totalProfit -= (refund - costRecovered);
+    }
 
     res.json({
       dailyData,
       summary: {
         totalRevenue,
         totalCost,
-        totalProfit: totalRevenue - totalCost,
-        margin: totalRevenue > 0 && Number.isFinite(totalRevenue - totalCost)
-          ? (((totalRevenue - totalCost) / totalRevenue) * 100).toFixed(1)
+        totalProfit,
+        margin: totalRevenue > 0 && Number.isFinite(totalProfit)
+          ? ((totalProfit / totalRevenue) * 100).toFixed(1)
           : '0',
-        totalTransactions: sales.length
+        totalTransactions: sales.filter(s => s.status !== 'fully_returned').length,
+        totalRefunds: monthReturns.reduce((sum, r) => sum + Number(r.total_refund || 0), 0)
       }
     });
   } catch (error) {
@@ -211,9 +322,70 @@ export const getDashboardStats = async (req, res) => {
       [today]
     );
 
-    const todayRevenue = todaySales.reduce((sum, s) => sum + Number(s.total_amount || 0), 0);
-    const todayProfit = sumSalesProfit(todaySales);
-    const marginRaw = todayRevenue > 0 ? (todayProfit / todayRevenue) * 100 : 0;
+    const todayReturns = dbAll(
+      `
+      SELECT * FROM returns
+      WHERE date(created_at) = ?
+    `,
+      [today]
+    );
+
+    let todayRevenue = 0;
+    let todayCost = 0;
+    
+    // Revenue and cost from sales created today (already net of any returns applied to them)
+    // Wait, if a sale was created today and returned today, its total_amount is already reduced.
+    // If a sale was created yesterday and returned today, its total_amount was reduced in the sales table, 
+    // but the refund action happened today. So counting it properly requires looking at transactions.
+    // To make it accurate: 
+    // Revenue = (Sum of original sales created today) - (Sum of returns processed today)
+    // Actually, since `total_amount` in sales is already net of returns, summing `total_amount` for today's sales 
+    // ALREADY deducts returns made against today's sales.
+    // BUT we also need to deduct returns made today against PAST sales.
+    // This can get tricky. Let's just calculate:
+    // Today's Revenue = (Today's Sales Gross) - (Today's Returns Total)
+    
+    // Instead of relying on the mutated sales table for daily revenue (which changes historical data),
+    // we should compute daily cash flow: what was sold today - what was returned today.
+    // But since the system currently mutates `total_amount` on returns, summing `total_amount` of today's sales 
+    // is the Net Sales of today's invoices. 
+    // If we subtract today's returns for PAST invoices, we get today's net cash flow.
+    
+    // Let's gather all original sales amount for today:
+    // Wait, the sales table `total_amount` is ALREADY mutated.
+    // Let's compute profit using `sumSalesProfit` for today's sales (which is net of returns on those sales).
+    let netRevenue = todaySales.reduce((sum, s) => sum + Number(s.total_amount || 0), 0);
+    let netProfit = sumSalesProfit(todaySales);
+    
+    // Now subtract returns made TODAY for sales that were NOT created today
+    const returnsForPastSales = todayReturns.filter(r => {
+      // Find the original sale date
+      const sale = dbGet('SELECT created_at FROM sales WHERE invoice_number = ?', [r.original_invoice]);
+      if (sale) {
+        return sale.created_at && !sale.created_at.startsWith(today);
+      }
+      return false;
+    });
+
+    for (const r of returnsForPastSales) {
+      const refund = Number(r.total_refund || 0);
+      netRevenue -= refund;
+      
+      // Calculate cost of returned items to add back to profit
+      // Profit = Revenue - Cost. If we refund revenue, we also recover cost.
+      // So netProfit change = -Refund + Cost Recovered
+      let costRecovered = 0;
+      const retItems = r.items ? (typeof r.items === 'string' ? JSON.parse(r.items) : r.items) : [];
+      for (const item of retItems) {
+        const prod = dbGet('SELECT purchase_price FROM products WHERE id = ?', [item.product]);
+        if (prod) {
+          costRecovered += (Number(prod.purchase_price) || 0) * (Number(item.quantity) || 0);
+        }
+      }
+      netProfit -= (refund - costRecovered);
+    }
+
+    const marginRaw = netRevenue > 0 ? (netProfit / netRevenue) * 100 : 0;
     const todayMarginPct = Number.isFinite(marginRaw) ? marginRaw.toFixed(1) : '0';
 
     const lowStock = dbAll(`
@@ -243,11 +415,14 @@ export const getDashboardStats = async (req, res) => {
     `,
       [today]
     );
+    
+    // Count only non-fully-returned sales as active transactions
+    const activeSalesCount = todaySales.filter(s => s.status !== 'fully_returned').length;
 
     res.json({
-      todaySales: todaySales.length,
-      todayRevenue,
-      todayProfit,
+      todaySales: activeSalesCount,
+      todayRevenue: netRevenue,
+      todayProfit: netProfit,
       todayMarginPct,
       lowStockCount: lowStock.length,
       expiringCount: expiring.length,
